@@ -4,6 +4,7 @@ import '../create_post/create_post_page.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
+import 'dart:async';
 
 class FeedPage extends StatefulWidget {
   const FeedPage({Key? key}) : super(key: key);
@@ -16,11 +17,16 @@ class _FeedPageState extends State<FeedPage> {
   int _selectedIndex = 0;
   String? avatarUrl;
   final Map<String, int> commentCounts = {};
+  bool hasLikeNotification = false;
+  bool hasCommentNotification = false;
+  StreamSubscription<List<Map<String, dynamic>>>? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
     _fetchAvatar();
+    _checkNotifications();
+    _listenNotifications();
   }
 
   Future<void> _fetchAvatar() async {
@@ -34,6 +40,33 @@ class _FeedPageState extends State<FeedPage> {
     setState(() {
       avatarUrl = data != null ? data['avatar_url'] as String? : null;
     });
+  }
+
+  Future<void> _checkNotifications() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    // Buscar notificações não lidas do usuário logado
+    final notifications = await Supabase.instance.client
+        .from('notifications')
+        .select('type')
+        .eq('user_id', user.id)
+        .eq('read', false);
+    setState(() {
+      hasLikeNotification = notifications.any((n) => n['type'] == 'like');
+      hasCommentNotification = notifications.any((n) => n['type'] == 'comment');
+    });
+  }
+
+  Future<void> _markNotificationsAsRead(String type) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    await Supabase.instance.client
+        .from('notifications')
+        .update({'read': true})
+        .eq('user_id', user.id)
+        .eq('type', type)
+        .eq('read', false);
+    _checkNotifications();
   }
 
   void _onItemTapped(int index) {
@@ -50,6 +83,25 @@ class _FeedPageState extends State<FeedPage> {
         _selectedIndex = index;
       });
     }
+  }
+
+  void _listenNotifications() {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    // Cancela a subscription anterior se já existir
+    _notificationSubscription?.cancel();
+    _notificationSubscription = Supabase.instance.client
+        .from('notifications:user_id=eq.${user.id}')
+        .stream(primaryKey: ['id'])
+        .listen((event) {
+          _checkNotifications();
+        });
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -72,7 +124,25 @@ class _FeedPageState extends State<FeedPage> {
         child: SafeArea(
           child: Column(
             children: [
-              _FeedAppBar(),
+              _FeedAppBar(
+                hasLikeNotification: hasLikeNotification,
+                hasCommentNotification: hasCommentNotification,
+                onLikePressed: () {
+                  _markNotificationsAsRead('like');
+                  // Aqui você pode abrir um modal de curtidas se desejar
+                },
+                onCommentPressed: hasCommentNotification
+                    ? () {
+                        _markNotificationsAsRead('comment');
+                        // Chama o modal de comentários
+                        final appBar = _FeedAppBar(
+                          hasLikeNotification: hasLikeNotification,
+                          hasCommentNotification: hasCommentNotification,
+                        );
+                        appBar._showCommentsNotificationModal(context);
+                      }
+                    : null,
+              ),
               _StoriesBar(),
               const Divider(height: 1),
               Expanded(child: _FeedList()),
@@ -107,6 +177,178 @@ class _FeedPageState extends State<FeedPage> {
 }
 
 class _FeedAppBar extends StatelessWidget {
+  final bool hasLikeNotification;
+  final bool hasCommentNotification;
+  final void Function()? onLikePressed;
+  final void Function()? onCommentPressed;
+
+  const _FeedAppBar({
+    required this.hasLikeNotification,
+    required this.hasCommentNotification,
+    this.onLikePressed,
+    this.onCommentPressed,
+    Key? key,
+  }) : super(key: key);
+
+  void _showCommentsNotificationModal(BuildContext context) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    // Buscar posts do usuário logado
+    final posts = await Supabase.instance.client
+        .from('posts')
+        .select('id, content_text')
+        .eq('user_id', user.id);
+    final postIds = posts.map((p) => p['id']).toList();
+    if (postIds.isEmpty) return;
+    // Buscar comentários recebidos
+    final comments = await Supabase.instance.client
+        .from('comments')
+        .select('*, profiles!user_id(id, username, avatar_url)')
+        .inFilter('post_id', postIds)
+        .order('created_at', ascending: false)
+        .limit(50);
+    if (!context.mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SizedBox(
+          height: MediaQuery.of(context).size.height * 0.7,
+          child: comments.isEmpty
+              ? const Center(child: Text('Nenhum comentário novo.'))
+              : ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: comments.length,
+                  separatorBuilder: (_, __) => const Divider(),
+                  itemBuilder: (context, i) {
+                    final c = comments[i];
+                    final profile = c['profiles'] ?? {};
+                    final post = posts.firstWhere(
+                      (p) => p['id'] == c['post_id'],
+                      orElse: () => {'id': '', 'content_text': ''},
+                    );
+                    return ListTile(
+                      leading: (profile['avatar_url'] != null && profile['avatar_url'].toString().isNotEmpty)
+                          ? CircleAvatar(backgroundImage: NetworkImage(profile['avatar_url']))
+                          : const CircleAvatar(child: Icon(Icons.person, size: 20)),
+                      title: GestureDetector(
+                        onTap: () {
+                          Navigator.pop(context);
+                          if (profile['id'] != null) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ProfilePage(profileId: profile['id']),
+                              ),
+                            );
+                          }
+                        },
+                        child: Text(
+                          profile['username'] ?? 'Usuário',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(c['content'] ?? '', maxLines: 2, overflow: TextOverflow.ellipsis),
+                          if (post['content_text'] != null)
+                            Text('No post: ${post['content_text']}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                          Text(c['created_at'] != null ? c['created_at'].toString().substring(0, 16).replaceFirst('T', ' ') : '',
+                              style: const TextStyle(fontSize: 11, color: Colors.black38)),
+                        ],
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+        );
+      },
+    );
+  }
+
+  void _showLikesNotificationModal(BuildContext context) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    // Buscar notificações de curtidas não lidas e lidas do usuário logado
+    final notifications = await Supabase.instance.client
+        .from('notifications')
+        .select('*, profiles:source_user_id(id, username, avatar_url), posts(id, content_text)')
+        .eq('user_id', user.id)
+        .eq('type', 'like')
+        .order('created_at', ascending: false)
+        .limit(50);
+    if (!context.mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SizedBox(
+          height: MediaQuery.of(context).size.height * 0.7,
+          child: notifications.isEmpty
+              ? const Center(child: Text('Nenhuma curtida nova.'))
+              : ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: notifications.length,
+                  separatorBuilder: (_, __) => const Divider(),
+                  itemBuilder: (context, i) {
+                    final n = notifications[i];
+                    final profile = n['profiles'] ?? {};
+                    final post = n['posts'] ?? {};
+                    return ListTile(
+                      leading: (profile['avatar_url'] != null && profile['avatar_url'].toString().isNotEmpty)
+                          ? CircleAvatar(backgroundImage: NetworkImage(profile['avatar_url']))
+                          : const CircleAvatar(child: Icon(Icons.person, size: 20)),
+                      title: GestureDetector(
+                        onTap: () {
+                          Navigator.pop(context);
+                          if (profile['id'] != null) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ProfilePage(profileId: profile['id']),
+                              ),
+                            );
+                          }
+                        },
+                        child: Text(
+                          profile['username'] ?? 'Usuário',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Curtiu seu post', style: const TextStyle(fontSize: 14)),
+                          if (post['content_text'] != null)
+                            Text('No post: ${post['content_text']}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                          Text(n['created_at'] != null ? n['created_at'].toString().substring(0, 16).replaceFirst('T', ' ') : '',
+                              style: const TextStyle(fontSize: 11, color: Colors.black38)),
+                        ],
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -120,22 +362,54 @@ class _FeedAppBar extends StatelessWidget {
           ),
           Row(
             children: [
-              IconButton(icon: const Icon(Icons.favorite_border), onPressed: () {}),
               Stack(
                 children: [
-                  IconButton(icon: const Icon(Icons.messenger_outline), onPressed: () {}),
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(4),
+                  IconButton(
+                    icon: const Icon(Icons.favorite_border),
+                    onPressed: () async {
+                      await (context.findAncestorStateOfType<_FeedPageState>()?._markNotificationsAsRead('like'));
+                      _showLikesNotificationModal(context);
+                    },
+                  ),
+                  if (hasLikeNotification)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white, width: 2.5),
+                        ),
                       ),
                     ),
+                ],
+              ),
+              Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.messenger_outline),
+                    onPressed: () async {
+                      await (context.findAncestorStateOfType<_FeedPageState>()?._markNotificationsAsRead('comment'));
+                      _showCommentsNotificationModal(context);
+                    },
                   ),
+                  if (hasCommentNotification)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: Colors.blue, // azul para comentários
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white, width: 2.5),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ],
@@ -146,60 +420,88 @@ class _FeedAppBar extends StatelessWidget {
   }
 }
 
-class _StoriesBar extends StatelessWidget {
-  final List<Map<String, String>> stories = const [
-    {'name': 'Seu story', 'avatar': 'https://randomuser.me/api/portraits/men/1.jpg'},
-    {'name': 'cleitonsan_03', 'avatar': 'https://randomuser.me/api/portraits/men/2.jpg'},
-    {'name': 'sampaiostepha...', 'avatar': 'https://randomuser.me/api/portraits/women/3.jpg'},
-    {'name': 'godllywoodofi...', 'avatar': 'https://randomuser.me/api/portraits/women/4.jpg'},
-    {'name': '_jnsilva_', 'avatar': 'https://randomuser.me/api/portraits/women/5.jpg'},
-    {'name': 'willian_moraes', 'avatar': 'https://randomuser.me/api/portraits/men/6.jpg'},
-    {'name': 'maria_lima', 'avatar': 'https://randomuser.me/api/portraits/women/7.jpg'},
-    {'name': 'joao_pedro', 'avatar': 'https://randomuser.me/api/portraits/men/8.jpg'},
-  ];
+class _StoriesBar extends StatefulWidget {
+  @override
+  State<_StoriesBar> createState() => _StoriesBarState();
+}
+
+class _StoriesBarState extends State<_StoriesBar> {
+  late Future<List<Map<String, dynamic>>> _usersFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _usersFuture = _fetchUsers();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchUsers() async {
+    final data = await Supabase.instance.client
+        .from('profiles')
+        .select('id, username, avatar_url')
+        .order('updated_at', ascending: false)
+        .limit(50);
+    return List<Map<String, dynamic>>.from(data);
+  }
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 120,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        itemCount: stories.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 16),
-        itemBuilder: (context, i) {
-          final story = stories[i];
-          return Column(
-            children: [
-              Container(
-                width: 68,
-                height: 68,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFB2FEFA), Color(0xFF6A85F1), Color(0xFF8F5CFF), Color(0xFF6A1B9A)],
+      child: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _usersFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final users = snapshot.data ?? [];
+          if (users.isEmpty) {
+            return const Center(child: Text('Nenhum usuário encontrado.'));
+          }
+          return ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            itemCount: users.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 16),
+            itemBuilder: (context, i) {
+              final user = users[i];
+              return Column(
+                children: [
+                  Container(
+                    width: 68,
+                    height: 68,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFB2FEFA), Color(0xFF6A85F1), Color(0xFF8F5CFF), Color(0xFF6A1B9A)],
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(3.0),
+                      child: CircleAvatar(
+                        radius: 30,
+                        backgroundImage: user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty
+                            ? NetworkImage(user['avatar_url'])
+                            : null,
+                        child: (user['avatar_url'] == null || user['avatar_url'].toString().isEmpty)
+                            ? const Icon(Icons.person, size: 30)
+                            : null,
+                      ),
+                    ),
                   ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(3.0),
-                  child: CircleAvatar(
-                    radius: 30,
-                    backgroundImage: NetworkImage(story['avatar']!),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: 70,
+                    child: Text(
+                      user['username'] ?? '',
+                      style: const TextStyle(fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              SizedBox(
-                width: 70,
-                child: Text(
-                  story['name']!,
-                  style: const TextStyle(fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ],
+                ],
+              );
+            },
           );
         },
       ),
@@ -270,6 +572,22 @@ class _FeedListState extends State<_FeedList> {
         'user_id': user.id,
         'post_id': postId,
       });
+      // Buscar o dono do post
+      final post = await Supabase.instance.client
+          .from('posts')
+          .select('user_id')
+          .eq('id', postId)
+          .maybeSingle();
+      final postOwnerId = post != null ? post['user_id'] as String? : null;
+      if (postOwnerId != null && postOwnerId != user.id) {
+        await Supabase.instance.client.from('notifications').insert({
+          'user_id': postOwnerId,
+          'type': 'like',
+          'source_user_id': user.id,
+          'post_id': postId,
+          'read': false,
+        });
+      }
     }
   }
 
@@ -297,14 +615,33 @@ class _FeedListState extends State<_FeedList> {
   Future<void> _addComment(String postId, String content) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
-    await Supabase.instance.client.from('comments').insert({
+    final insertResult = await Supabase.instance.client.from('comments').insert({
       'user_id': user.id,
       'post_id': postId,
       'content': content,
-    });
+    }).select();
     setState(() {
       commentCounts[postId] = (commentCounts[postId] ?? 0) + 1;
     });
+    // Buscar o dono do post
+    final post = await Supabase.instance.client
+        .from('posts')
+        .select('user_id')
+        .eq('id', postId)
+        .maybeSingle();
+    final postOwnerId = post != null ? post['user_id'] as String? : null;
+    // Pega o id do comentário recém criado
+    final commentId = insertResult != null && insertResult is List && insertResult.isNotEmpty ? insertResult[0]['id'] : null;
+    if (postOwnerId != null && postOwnerId != user.id && commentId != null) {
+      await Supabase.instance.client.from('notifications').insert({
+        'user_id': postOwnerId,
+        'type': 'comment',
+        'source_user_id': user.id,
+        'post_id': postId,
+        'comment_id': commentId,
+        'read': false,
+      });
+    }
   }
 
   void _showCommentsModal(BuildContext context, String postId) {
@@ -359,7 +696,22 @@ class _FeedListState extends State<_FeedList> {
                                 leading: (user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty)
                                     ? CircleAvatar(backgroundImage: NetworkImage(user['avatar_url']))
                                     : const CircleAvatar(child: Icon(Icons.person, size: 20)),
-                                title: Text(user['username'] ?? 'Usuário', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                title: GestureDetector(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    if (user['id'] != null) {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) => ProfilePage(profileId: user['id']),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: Text(
+                                    user['username'] ?? 'Usuário',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                                  ),
+                                ),
                                 subtitle: Text(c['content'] ?? ''),
                               );
                             },
@@ -506,7 +858,7 @@ class _FeedListState extends State<_FeedList> {
                       : null,
                 ),
                 if (images.isNotEmpty)
-                  _PostImageCarousel(images: List<String>.from(images)),
+                  PostImageCarousel(images: List<String>.from(images)),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
@@ -595,15 +947,15 @@ class _FeedListState extends State<_FeedList> {
   }
 }
 
-class _PostImageCarousel extends StatefulWidget {
+class PostImageCarousel extends StatefulWidget {
   final List<String> images;
-  const _PostImageCarousel({required this.images});
+  const PostImageCarousel({required this.images});
 
   @override
-  State<_PostImageCarousel> createState() => _PostImageCarouselState();
+  State<PostImageCarousel> createState() => PostImageCarouselState();
 }
 
-class _PostImageCarouselState extends State<_PostImageCarousel> {
+class PostImageCarouselState extends State<PostImageCarousel> {
   late final PageController _pageController;
   int _currentPage = 0;
 
