@@ -358,7 +358,7 @@ class _FeedAppBar extends StatelessWidget {
         children: [
           Image.asset(
             'assets/images/logofju.png',
-            height: 38,
+            height: 45,
           ),
           Row(
             children: [
@@ -519,6 +519,17 @@ class _FeedListState extends State<_FeedList> {
   final Map<String, bool> _likedPosts = {};
   final Map<String, int> _likeCounts = {};
   final Map<String, int> commentCounts = {};
+
+  Future<Map<String, dynamic>?> _fetchQuizDestaque() async {
+    final quiz = await Supabase.instance.client
+        .from('quizzes')
+        .select('id, title')
+        .eq('destaque', true)
+        .order('created_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    return quiz;
+  }
 
   @override
   void initState() {
@@ -803,142 +814,214 @@ class _FeedListState extends State<_FeedList> {
           return const Center(child: Text('Nenhuma postagem ainda.'));
         }
         final posts = snapshot.data!;
-        return ListView.separated(
-          padding: EdgeInsets.zero,
-          itemCount: posts.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (context, i) {
-            final post = posts[i];
-            final user = post['profiles'] ?? {};
-            dynamic mediaUrls = post['media_urls'];
-            List<dynamic> images = [];
-            if (mediaUrls is List) {
-              if (mediaUrls.isNotEmpty && mediaUrls[0] is List) {
-                images = List<String>.from(mediaUrls[0]);
-              } else {
-                images = List<String>.from(mediaUrls);
-              }
-            }
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ListTile(
-                  leading: GestureDetector(
+        return FutureBuilder<Map<String, dynamic>?>(
+          future: _fetchQuizDestaque(),
+          builder: (context, quizSnapshot) {
+            final quizDestaque = quizSnapshot.data;
+            return ListView.separated(
+              padding: EdgeInsets.zero,
+              itemCount: posts.length + (quizDestaque != null ? 1 : 0),
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, i) {
+                if (quizDestaque != null && i == 0) {
+                  // Banner de destaque antes da primeira postagem
+                  return GestureDetector(
                     onTap: () {
-                      if (user['id'] != null) {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ProfilePage(profileId: user['id']),
-                          ),
-                        );
-                      }
+                      Navigator.of(context).pushNamed(
+                        '/bible_quiz',
+                        arguments: {'quizId': quizDestaque['id']},
+                      );
                     },
-                    child: (user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty)
-                        ? CircleAvatar(backgroundImage: NetworkImage(user['avatar_url']))
-                        : const CircleAvatar(child: Icon(Icons.person, size: 20)),
-                  ),
-                  title: GestureDetector(
-                    onTap: () {
-                      if (user['id'] != null) {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ProfilePage(profileId: user['id']),
-                          ),
-                        );
-                      }
-                    },
-                    child: Text(user['username'] ?? 'Usuário', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                  subtitle: Text(post['created_at'] != null ? post['created_at'].toString().substring(0, 16).replaceFirst('T', ' ') : ''),
-                  trailing: (post['user_id'] != Supabase.instance.client.auth.currentUser?.id)
-                      ? IconButton(
-                          icon: const Icon(Icons.more_horiz),
-                          onPressed: () => _showPostOptionsModal(context),
-                        )
-                      : null,
-                ),
-                if (images.isNotEmpty)
-                  PostImageCarousel(images: List<String>.from(images)),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              (_likedPosts[post['id']] ?? false)
-                                  ? Icons.favorite
-                                  : Icons.favorite_border,
-                              color: (_likedPosts[post['id']] ?? false)
-                                  ? Colors.red
-                                  : null,
-                              size: 30,
-                            ),
-                            onPressed: () => _toggleLike(post['id']),
-                            iconSize: 30,
-                          ),
-                          Text(
-                            (_likeCounts[post['id']] ?? 0).toString(),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    child: Container(
+                      height: 100,
+                      width: double.infinity,
+                      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF2D2EFF), Color(0xFF7B2FF2), Color(0xFFE94057)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 8,
+                            offset: Offset(0, 4),
                           ),
                         ],
                       ),
-                      const SizedBox(width: 8),
-                      FutureBuilder<int>(
-                        future: _fetchCommentCount(post['id']),
-                        builder: (context, snapshot) {
-                          final count = snapshot.data ?? 0;
-                          return Row(
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 16),
+                          const Icon(Icons.star, color: Colors.yellow, size: 32),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Participe do Bible Quiz!',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  quizDestaque['title'] ?? '',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.play_arrow, color: Colors.white, size: 28),
+                          const SizedBox(width: 16),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                final postIndex = quizDestaque != null ? i - 1 : i;
+                final post = posts[postIndex];
+                final user = post['profiles'] ?? {};
+                dynamic mediaUrls = post['media_urls'];
+                List<dynamic> images = [];
+                if (mediaUrls is List) {
+                  if (mediaUrls.isNotEmpty && mediaUrls[0] is List) {
+                    images = List<String>.from(mediaUrls[0]);
+                  } else {
+                    images = List<String>.from(mediaUrls);
+                  }
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ListTile(
+                      leading: GestureDetector(
+                        onTap: () {
+                          if (user['id'] != null) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ProfilePage(profileId: user['id']),
+                              ),
+                            );
+                          }
+                        },
+                        child: (user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty)
+                            ? CircleAvatar(backgroundImage: NetworkImage(user['avatar_url']))
+                            : const CircleAvatar(child: Icon(Icons.person, size: 20)),
+                      ),
+                      title: GestureDetector(
+                        onTap: () {
+                          if (user['id'] != null) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ProfilePage(profileId: user['id']),
+                              ),
+                            );
+                          }
+                        },
+                        child: Text(user['username'] ?? 'Usuário', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      subtitle: Text(post['created_at'] != null ? post['created_at'].toString().substring(0, 16).replaceFirst('T', ' ') : ''),
+                      trailing: (post['user_id'] != Supabase.instance.client.auth.currentUser?.id)
+                          ? IconButton(
+                              icon: const Icon(Icons.more_horiz),
+                              onPressed: () => _showPostOptionsModal(context),
+                            )
+                          : null,
+                    ),
+                    if (images.isNotEmpty)
+                      PostImageCarousel(images: List<String>.from(images)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        children: [
+                          Row(
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.mode_comment_outlined, size: 30,),
-                                onPressed: () => _showCommentsModal(context, post['id']),
+                                icon: Icon(
+                                  (_likedPosts[post['id']] ?? false)
+                                      ? Icons.favorite
+                                      : Icons.favorite_border,
+                                  color: (_likedPosts[post['id']] ?? false)
+                                      ? Colors.red
+                                      : null,
+                                  size: 30,
+                                ),
+                                onPressed: () => _toggleLike(post['id']),
                                 iconSize: 30,
                               ),
                               Text(
-                                count.toString(),
+                                (_likeCounts[post['id']] ?? 0).toString(),
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                               ),
                             ],
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.send_outlined, size: 30,),
-                            onPressed: () {
-                              final content = post['content_text'] ?? '';
-                              Share.share(content.isNotEmpty ? content : 'Veja este post!');
-                            },
-                            iconSize: 30,
                           ),
-                          Text(
-                            '0', // Compartilhamentos (fixo por enquanto)
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                          const SizedBox(width: 8),
+                          FutureBuilder<int>(
+                            future: _fetchCommentCount(post['id']),
+                            builder: (context, snapshot) {
+                              final count = snapshot.data ?? 0;
+                              return Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.mode_comment_outlined, size: 30,),
+                                    onPressed: () => _showCommentsModal(context, post['id']),
+                                    iconSize: 30,
+                                  ),
+                                  Text(
+                                    count.toString(),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.send_outlined, size: 30,),
+                                onPressed: () {
+                                  final content = post['content_text'] ?? '';
+                                  Share.share(content.isNotEmpty ? content : 'Veja este post!');
+                                },
+                                iconSize: 30,
+                              ),
+                              Text(
+                                '0', // Compartilhamentos (fixo por enquanto)
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.bookmark_border, size: 30,),
+                            onPressed: () {},
+                            iconSize: 30,
                           ),
                         ],
                       ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.bookmark_border, size: 30,),
-                        onPressed: () {},
-                        iconSize: 30,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        post['content_text'] ?? '',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    post['content_text'] ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                );
+              },
             );
           },
         );

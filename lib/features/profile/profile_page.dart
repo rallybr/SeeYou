@@ -228,30 +228,76 @@ class _ProfileHeader extends StatelessWidget {
 }
 
 class _ProfileMenuButton extends StatelessWidget {
+  Future<String?> _getNivel() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return null;
+    final data = await Supabase.instance.client
+        .from('profiles')
+        .select('nivel')
+        .eq('id', user.id)
+        .maybeSingle();
+    return data != null ? data['nivel'] as String? : null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.menu),
-      onSelected: (value) async {
-        if (value == 'logout') {
-          await Supabase.instance.client.auth.signOut();
-          if (context.mounted) {
-            Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
-          }
-        } else if (value == 'edit') {
-          // Navegação para tela de edição de perfil (implementar depois)
-        }
+    return FutureBuilder<String?>(
+      future: _getNivel(),
+      builder: (context, snapshot) {
+        final nivel = snapshot.data;
+        final podeVerDashboard = nivel == 'admin' || nivel == 'editor' || nivel == 'moderador';
+        return PopupMenuButton<String>(
+          icon: const Icon(Icons.menu, color: Color(0xFF2D2EFF), size: 30),
+          color: Colors.white.withOpacity(0.97),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          elevation: 12,
+          itemBuilder: (context) => [
+            if (podeVerDashboard)
+              PopupMenuItem<String>(
+                value: 'dashboard',
+                child: Row(
+                  children: const [
+                    Icon(Icons.dashboard, color: Color(0xFF2D2EFF)),
+                    SizedBox(width: 12),
+                    Text('Dashboard', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ],
+                ),
+              ),
+            PopupMenuItem<String>(
+              value: 'edit',
+              child: Row(
+                children: const [
+                  Icon(Icons.edit, color: Color(0xFF7B2FF2)),
+                  SizedBox(width: 12),
+                  Text('Editar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+            ),
+            PopupMenuItem<String>(
+              value: 'logout',
+              child: Row(
+                children: const [
+                  Icon(Icons.logout, color: Color(0xFFE94057)),
+                  SizedBox(width: 12),
+                  Text('Logout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+            ),
+          ],
+          onSelected: (value) async {
+            if (value == 'dashboard') {
+              Navigator.of(context).pushNamed('/admin');
+            } else if (value == 'logout') {
+              await Supabase.instance.client.auth.signOut();
+              if (context.mounted) {
+                Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+              }
+            } else if (value == 'edit') {
+              // Navegação para tela de edição de perfil (implementar depois)
+            }
+          },
+        );
       },
-      itemBuilder: (context) => [
-        const PopupMenuItem<String>(
-          value: 'edit',
-          child: Text('Editar'),
-        ),
-        const PopupMenuItem<String>(
-          value: 'logout',
-          child: Text('Logout'),
-        ),
-      ],
     );
   }
 }
@@ -340,6 +386,15 @@ class _ProfileActions extends StatelessWidget {
         children: [
           Expanded(
             child: OutlinedButton(
+              onPressed: () {
+                Navigator.of(context).pushNamed('/bible_quiz');
+              },
+              child: const Text('Quiz'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton(
               onPressed: profile == null
                   ? null
                   : () async {
@@ -362,7 +417,7 @@ class _ProfileActions extends StatelessWidget {
                   : () async {
                       final selected = await showMenu<String>(
                         context: context,
-                        position: RelativeRect.fromLTRB(1000, 200, 0, 0), // posição aproximada
+                        position: RelativeRect.fromLTRB(1000, 200, 0, 0),
                         items: [
                           const PopupMenuItem<String>(
                             value: 'copy',
@@ -688,7 +743,6 @@ class _PostDetailViewState extends State<_PostDetailView> {
   }
 
   void _showCommentsModal(BuildContext context) {
-    // Reutiliza a função do feed, se quiser pode importar e usar a mesma
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -697,82 +751,95 @@ class _PostDetailViewState extends State<_PostDetailView> {
       ),
       builder: (context) {
         final TextEditingController _commentController = TextEditingController();
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            left: 16,
-            right: 16,
-            top: 16,
-          ),
-          child: SizedBox(
-            height: MediaQuery.of(context).size.height * 0.7,
-            child: Column(
-              children: [
-                const Text('Comentários', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: FutureBuilder<List<Map<String, dynamic>>>(
-                    future: Supabase.instance.client
-                        .from('comments')
-                        .select('*, profiles!user_id(id, username, avatar_url)')
-                        .eq('post_id', widget.post['id'])
-                        .order('created_at', ascending: true),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      final comments = snapshot.data ?? [];
-                      if (comments.isEmpty) {
-                        return const Center(child: Text('Nenhum comentário ainda.'));
-                      }
-                      return ListView.builder(
-                        itemCount: comments.length,
-                        itemBuilder: (context, i) {
-                          final c = comments[i];
-                          final user = c['profiles'] ?? {};
-                          return ListTile(
-                            leading: (user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty)
-                                ? CircleAvatar(backgroundImage: NetworkImage(user['avatar_url']))
-                                : const CircleAvatar(child: Icon(Icons.person, size: 20)),
-                            title: Text(user['username'] ?? 'Usuário', style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text(c['content'] ?? ''),
+        // Adiciona um Future de estado para atualizar os comentários
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<List<Map<String, dynamic>>> _fetchComments() async {
+              final data = await Supabase.instance.client
+                  .from('comments')
+                  .select('*, profiles!user_id(id, username, avatar_url)')
+                  .eq('post_id', widget.post['id'])
+                  .order('created_at', ascending: true);
+              return List<Map<String, dynamic>>.from(data);
+            }
+            // Variável de estado para o future
+            late Future<List<Map<String, dynamic>>> commentsFuture = _fetchComments();
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                left: 16,
+                right: 16,
+                top: 16,
+              ),
+              child: SizedBox(
+                height: MediaQuery.of(context).size.height * 0.7,
+                child: Column(
+                  children: [
+                    const Text('Comentários', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: FutureBuilder<List<Map<String, dynamic>>>(
+                        future: commentsFuture,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          final comments = snapshot.data ?? [];
+                          if (comments.isEmpty) {
+                            return const Center(child: Text('Nenhum comentário ainda.'));
+                          }
+                          return ListView.builder(
+                            itemCount: comments.length,
+                            itemBuilder: (context, i) {
+                              final c = comments[i];
+                              final user = c['profiles'] ?? {};
+                              return ListTile(
+                                leading: (user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty)
+                                    ? CircleAvatar(backgroundImage: NetworkImage(user['avatar_url']))
+                                    : const CircleAvatar(child: Icon(Icons.person, size: 20)),
+                                title: Text(user['username'] ?? 'Usuário', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text(c['content'] ?? ''),
+                              );
+                            },
                           );
                         },
-                      );
-                    },
-                  ),
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _commentController,
-                        decoration: const InputDecoration(hintText: 'Adicione um comentário...'),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: () async {
-                        final text = _commentController.text.trim();
-                        if (text.isNotEmpty) {
-                          final user = Supabase.instance.client.auth.currentUser;
-                          if (user == null) return;
-                          await Supabase.instance.client.from('comments').insert({
-                            'user_id': user.id,
-                            'post_id': widget.post['id'],
-                            'content': text,
-                          });
-                          _commentController.clear();
-                          setState(() {});
-                        }
-                      },
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _commentController,
+                            decoration: const InputDecoration(hintText: 'Adicione um comentário...'),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.send),
+                          onPressed: () async {
+                            final text = _commentController.text.trim();
+                            if (text.isNotEmpty) {
+                              final user = Supabase.instance.client.auth.currentUser;
+                              if (user == null) return;
+                              await Supabase.instance.client.from('comments').insert({
+                                'user_id': user.id,
+                                'post_id': widget.post['id'],
+                                'content': text,
+                              });
+                              _commentController.clear();
+                              setModalState(() {
+                                commentsFuture = _fetchComments();
+                              });
+                            }
+                          },
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 32),
                   ],
                 ),
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

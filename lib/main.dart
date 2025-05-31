@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'features/auth/pages/login_page.dart';
 import 'features/auth/pages/register_flow_page.dart';
 import 'features/feed/feed_page.dart';
+import 'features/admin/dashboard_page.dart';
+import 'features/bible_quiz/bible_quiz_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,6 +20,11 @@ Future<void> main() async {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+
+  Future<bool> _isLoggedIn() async {
+    final session = Supabase.instance.client.auth.currentSession;
+    return session != null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +40,27 @@ class MyApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      initialRoute: '/',
+      home: FutureBuilder<bool>(
+        future: _isLoggedIn(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (snapshot.data == true) {
+            return const FeedPage();
+          } else {
+            return const LoginPage();
+          }
+        },
+      ),
       routes: {
-        '/': (context) => const LoginPage(),
+        '/login': (context) => const LoginPage(),
         '/register': (context) => const RegisterFlowPage(),
         '/feed': (context) => const FeedPage(),
+        '/admin': (context) => const DashboardPage(),
+        '/bible_quiz': (context) => const BibleQuizPage(),
       },
     );
   }

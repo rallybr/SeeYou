@@ -41,6 +41,7 @@ dependencies:
   intl: ^0.19.0
   share_plus: ^7.2.1
   smooth_page_indicator: ^1.1.0
+  audioplayers: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -98,3 +99,6 @@ flutter:
   assets:
     - assets/env.txt
     - assets/images/logofju.png
+    - assets/images/bible_quiz_logo.png
+    - assets/sounds/success.mp3
+    - assets/sounds/error.mp3
