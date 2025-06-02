@@ -134,6 +134,31 @@ class _BibleQuizPageState extends State<BibleQuizPage>
     final question = questions[currentQuestion];
     final questionId = question['id'];
     final optionId = question['optionIds'][index];
+    // Registrar participante se ainda não registrado
+    if (quizId != null) {
+      final String quizIdLocal = quizId!;
+      final existingParticipant = await Supabase.instance.client
+        .from('quiz_participants')
+        .select()
+        .eq('user_id', user.id)
+        .eq('quiz_id', quizIdLocal)
+        .maybeSingle();
+      if (existingParticipant == null) {
+        try {
+          await Supabase.instance.client.from('quiz_participants').insert({
+            'user_id': user.id,
+            'quiz_id': quizIdLocal,
+          });
+        } catch (e) {
+          print('Erro ao registrar participante: $e');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Erro ao registrar participação: $e')),
+            );
+          }
+        }
+      }
+    }
     // Verificar se já respondeu
     final existing = await Supabase.instance.client
       .from('quiz_answers')

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/rendering.dart';
+import 'dart:ui';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -38,9 +41,40 @@ class _DashboardPageState extends State<DashboardPage> {
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth >= 900;
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Administração - Dashboard'),
-            backgroundColor: Colors.deepPurple,
+          appBar: PreferredSize(
+            preferredSize: const Size.fromHeight(kToolbarHeight),
+            child: Stack(
+              children: [
+                // Fundo glassmorphism
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(0),
+                    bottomRight: Radius.circular(0),
+                  ),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                    child: Container(
+                      height: kToolbarHeight + 8,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.45),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black26,
+                            blurRadius: 16,
+                            offset: Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                AppBar(
+                  title: const Text('DASHBOARD', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                ),
+              ],
+            ),
           ),
           drawer: isDesktop ? null : _DashboardDrawer(
             selectedIndex: _selectedIndex,
@@ -57,6 +91,8 @@ class _DashboardPageState extends State<DashboardPage> {
             quizSubMenus: _quizSubMenus,
           ),
           body: Container(
+            width: double.infinity,
+            height: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -68,35 +104,42 @@ class _DashboardPageState extends State<DashboardPage> {
                 ],
               ),
             ),
-            child: Row(
-              children: [
-                if (isDesktop)
-                  SizedBox(
-                    width: 220,
-                    child: _DashboardDrawer(
-                      selectedIndex: _selectedIndex,
-                      onSelect: (i) => setState(() {
-                        _selectedIndex = i;
-                        _selectedQuizSubMenu = null;
-                      }),
-                      sections: _sections,
-                      selectedQuizSubMenu: _selectedQuizSubMenu,
-                      onQuizSubMenuSelect: (i) => setState(() {
-                        _selectedIndex = _sections.length - 1;
-                        _selectedQuizSubMenu = i;
-                      }),
-                      quizSubMenus: _quizSubMenus,
-                    ),
-                  ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: _selectedIndex == _sections.length - 1
-                        ? _BibleQuizSection(index: _selectedQuizSubMenu)
-                        : _DashboardSection(index: _selectedIndex),
-                  ),
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: MediaQuery.of(context).size.height - kToolbarHeight,
                 ),
-              ],
+                child: Row(
+                  children: [
+                    if (isDesktop)
+                      SizedBox(
+                        width: 220,
+                        child: _DashboardDrawer(
+                          selectedIndex: _selectedIndex,
+                          onSelect: (i) => setState(() {
+                            _selectedIndex = i;
+                            _selectedQuizSubMenu = null;
+                          }),
+                          sections: _sections,
+                          selectedQuizSubMenu: _selectedQuizSubMenu,
+                          onQuizSubMenuSelect: (i) => setState(() {
+                            _selectedIndex = _sections.length - 1;
+                            _selectedQuizSubMenu = i;
+                          }),
+                          quizSubMenus: _quizSubMenus,
+                        ),
+                      ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: _selectedIndex == _sections.length - 1
+                            ? _BibleQuizSection(index: _selectedQuizSubMenu)
+                            : _DashboardSection(index: _selectedIndex),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         );
@@ -217,11 +260,156 @@ class _DashboardSection extends StatelessWidget {
   }
 }
 
-class _DashboardOverview extends StatelessWidget {
+class _DashboardOverview extends StatefulWidget {
+  @override
+  State<_DashboardOverview> createState() => _DashboardOverviewState();
+}
+
+class _DashboardOverviewState extends State<_DashboardOverview> {
+  int? totalUsuarios;
+  int? totalPosts;
+  int? totalQuizzes;
+  int? totalParticipantes;
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData();
+  }
+
+  Future<void> _fetchDashboardData() async {
+    final usuarios = await Supabase.instance.client.from('profiles').select('id');
+    final posts = await Supabase.instance.client.from('posts').select('id');
+    final quizzes = await Supabase.instance.client.from('quizzes').select('id');
+    // Buscar participantes únicos em quizzes (usando quiz_answers)
+    final participantesRaw = await Supabase.instance.client
+      .from('quiz_answers')
+      .select('user_id, question_id');
+    // Buscar quiz_id de cada resposta
+    final questoes = await Supabase.instance.client
+      .from('quiz_questions')
+      .select('id, quiz_id');
+    final questaoToQuiz = {for (var q in questoes) q['id']: q['quiz_id']};
+    final Set<String> participantesUnicos = {};
+    for (final resp in participantesRaw) {
+      final quizId = questaoToQuiz[resp['question_id']];
+      if (quizId != null && resp['user_id'] != null) {
+        participantesUnicos.add('${quizId}_${resp['user_id']}');
+      }
+    }
+    setState(() {
+      totalUsuarios = usuarios.length;
+      totalPosts = posts.length;
+      totalQuizzes = quizzes.length;
+      totalParticipantes = participantesUnicos.length;
+      loading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Text('Visão Geral', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+    if (loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Wrap(
+              spacing: 18,
+              runSpacing: 18,
+              alignment: WrapAlignment.center,
+              children: [
+                _DashboardCard(title: 'Usuários', value: totalUsuarios.toString(), icon: Icons.people, color: Colors.blue),
+                _DashboardCard(title: 'Posts', value: totalPosts.toString(), icon: Icons.post_add, color: Colors.purple),
+                _DashboardCard(title: 'Quizzes', value: totalQuizzes.toString(), icon: Icons.quiz, color: Colors.orange),
+                _DashboardCard(title: 'Participantes', value: totalParticipantes.toString(), icon: Icons.emoji_events, color: Colors.green),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          // Gráfico de barras
+          Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            elevation: 8,
+            margin: const EdgeInsets.all(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  const Text('Usuários por mês', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  SizedBox(
+                    height: 220,
+                    child: BarChart(
+                      BarChartData(
+                        barGroups: [
+                          BarChartGroupData(x: 0, barRods: [BarChartRodData(toY: 10, color: Colors.blue)]),
+                          BarChartGroupData(x: 1, barRods: [BarChartRodData(toY: 12, color: Colors.blue)]),
+                          BarChartGroupData(x: 2, barRods: [BarChartRodData(toY: 8, color: Colors.blue)]),
+                          BarChartGroupData(x: 3, barRods: [BarChartRodData(toY: 15, color: Colors.blue)]),
+                          BarChartGroupData(x: 4, barRods: [BarChartRodData(toY: 7, color: Colors.blue)]),
+                          BarChartGroupData(x: 5, barRods: [BarChartRodData(toY: 13, color: Colors.blue)]),
+                        ],
+                        titlesData: FlTitlesData(
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              getTitlesWidget: (value, meta) {
+                                final months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'];
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: Text(months[value.toInt()]),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Outros gráficos podem ser adicionados aqui
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+  final Color color;
+  const _DashboardCard({required this.title, required this.value, required this.icon, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 8,
+      color: Colors.white.withOpacity(0.96),
+      shadowColor: color.withOpacity(0.18),
+      child: Container(
+        width: 140,
+        height: 120,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 6),
+            Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: color)),
+            const SizedBox(height: 2),
+            Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black87), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1490,25 +1678,68 @@ class _RankingQuizFormState extends State<RankingQuizForm> {
                     final percent = _totalQuestoes > 0 ? acertos / _totalQuestoes : 0.0;
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          CircleAvatar(
-                            backgroundImage: user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty
-                                ? NetworkImage(user['avatar_url'])
-                                : null,
-                            radius: 28,
-                            child: (user['avatar_url'] == null || user['avatar_url'].toString().isEmpty)
-                                ? const Icon(Icons.person, size: 28)
-                                : null,
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundImage: user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty
+                                    ? NetworkImage(user['avatar_url'])
+                                    : null,
+                                radius: 28,
+                                child: (user['avatar_url'] == null || user['avatar_url'].toString().isEmpty)
+                                    ? const Icon(Icons.person, size: 28)
+                                    : null,
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  user['username'] ?? '',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('$acertos/$_totalQuestoes', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            ],
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              user['username'] ?? '',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                          const SizedBox(height: 8),
+                          TweenAnimationBuilder<double>(
+                            tween: Tween<double>(begin: 0, end: percent),
+                            duration: const Duration(milliseconds: 900),
+                            builder: (context, value, child) {
+                              return Stack(
+                                children: [
+                                  Container(
+                                    height: 18,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[300],
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  Container(
+                                    height: 18,
+                                    width: 220 * value,
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFF2D2EFF), Color(0xFF7B2FF2), Color(0xFFE94057)],
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  Positioned.fill(
+                                    child: Center(
+                                      child: Text(
+                                        '${(value * 100).toStringAsFixed(0)}%',
+                                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14, shadows: [Shadow(color: Colors.black26, blurRadius: 2)]),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
                         ],
                       ),
