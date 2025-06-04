@@ -284,12 +284,78 @@ class _GerenciarEquipesPageState extends State<GerenciarEquipesPage> {
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        TextField(
-                          decoration: const InputDecoration(
-                            labelText: 'Buscar equipe',
-                            prefixIcon: Icon(Icons.search),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                decoration: InputDecoration(
+                                  hintText: 'Buscar equipe ou localidade',
+                                  prefixIcon: const Icon(Icons.search),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                                onChanged: (v) {
+                                  setState(() => _filtroBusca = v);
+                                  _fetchEquipes();
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  decoration: InputDecoration(
+                                    hintText: 'Buscar equipe ou localidade',
+                                    prefixIcon: const Icon(Icons.search),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                                  ),
+                                  onChanged: (v) {
+                                    setState(() => _filtroBusca = v);
+                                    _fetchEquipes();
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              DropdownButton<String>(
+                                value: _filtroSituacao,
+                                items: [
+                                  DropdownMenuItem(
+                                    value: 'ativo',
+                                    child: Row(
+                                      children: const [
+                                        Text('Ativos', style: TextStyle(color: Color(0xFFFFFFFF), fontSize: 18, fontWeight: FontWeight.bold)),
+                                        SizedBox(width: 4),
+                                        Icon(Icons.filter_list, color: Colors.white, size: 20),
+                                      ],
+                                    ),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'removido',
+                                    child: Text('Removidos', style: TextStyle(color: Color(0xFFFFFFFF), fontSize: 18)),
+                                  ),
+                                  const DropdownMenuItem(
+                                    value: 'todos',
+                                    child: Text('Todos', style: TextStyle(color: Color(0xFFFFFFFF), fontSize: 18)),
+                                  ),
+                                ],
+                                onChanged: (v) {
+                                  setState(() => _filtroSituacao = v!);
+                                  _fetchEquipes();
+                                },
+                                style: const TextStyle(color: Color(0xFFFFFFFF), fontWeight: FontWeight.bold),
+                                dropdownColor: Color(0xFF333333),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ],
                           ),
-                          onChanged: (v) => setStateDialog(() => busca = v),
                         ),
                         const SizedBox(height: 12),
                         equipesFiltradas.isEmpty
@@ -459,9 +525,9 @@ class _GerenciarEquipesPageState extends State<GerenciarEquipesPage> {
                       DropdownButton<String>(
                         value: filtroSituacao,
                         items: const [
-                          DropdownMenuItem(value: 'todos', child: Text('Todos')),
                           DropdownMenuItem(value: 'ativo', child: Text('Ativos', style: TextStyle(color: Colors.black, fontSize: 18))),
-                          DropdownMenuItem(value: 'removido', child: Text('Removidos')),
+                          DropdownMenuItem(value: 'removido', child: Text('Removidos', style: TextStyle(color: Colors.black, fontSize: 18))),
+                          DropdownMenuItem(value: 'todos', child: Text('Todos', style: TextStyle(color: Colors.black, fontSize: 18))),
                         ],
                         onChanged: (v) => setStateDialog(() => filtroSituacao = v!),
                       ),
@@ -626,47 +692,6 @@ class _GerenciarEquipesPageState extends State<GerenciarEquipesPage> {
     );
   }
 
-  Widget _buildFiltros() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Buscar equipe ou localidade',
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              onChanged: (v) {
-                setState(() => _filtroBusca = v);
-                _fetchEquipes();
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          DropdownButton<String>(
-            value: _filtroSituacao,
-            items: const [
-              DropdownMenuItem(value: 'ativo', child: Text('Ativos', style: TextStyle(color: Colors.white, fontSize: 18))),
-              DropdownMenuItem(value: 'removido', child: Text('Removidos')),
-              DropdownMenuItem(value: 'todos', child: Text('Todos')),
-            ],
-            onChanged: (v) {
-              setState(() => _filtroSituacao = v!);
-              _fetchEquipes();
-            },
-            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-            dropdownColor: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -728,7 +753,6 @@ class _GerenciarEquipesPageState extends State<GerenciarEquipesPage> {
                 },
               ),
             ),
-            _buildFiltros(),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
               child: ElevatedButton.icon(
@@ -742,6 +766,59 @@ class _GerenciarEquipesPageState extends State<GerenciarEquipesPage> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   elevation: 8,
                 ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Buscar equipe ou localidade',
+                        prefixIcon: const Icon(Icons.search),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      onChanged: (v) {
+                        setState(() => _filtroBusca = v);
+                        _fetchEquipes();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  DropdownButton<String>(
+                    value: _filtroSituacao,
+                    items: [
+                      DropdownMenuItem(
+                        value: 'ativo',
+                        child: Row(
+                          children: const [
+                            Text('Ativos', style: TextStyle(color: Color(0xFFFFFFFF), fontSize: 18, fontWeight: FontWeight.bold)),
+                            SizedBox(width: 4),
+                            Icon(Icons.filter_list, color: Colors.white, size: 20),
+                          ],
+                        ),
+                      ),
+                      DropdownMenuItem(
+                        value: 'removido',
+                        child: Text('Removidos', style: TextStyle(color: Color(0xFFFFFFFF), fontSize: 18)),
+                      ),
+                      const DropdownMenuItem(
+                        value: 'todos',
+                        child: Text('Todos', style: TextStyle(color: Color(0xFFFFFFFF), fontSize: 18)),
+                      ),
+                    ],
+                    onChanged: (v) {
+                      setState(() => _filtroSituacao = v!);
+                      _fetchEquipes();
+                    },
+                    style: const TextStyle(color: Color(0xFFFFFFFF), fontWeight: FontWeight.bold),
+                    dropdownColor: Color(0xFF333333),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ],
               ),
             ),
             Expanded(
