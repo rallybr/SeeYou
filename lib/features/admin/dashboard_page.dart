@@ -3,6 +3,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:ui';
+import 'criar_campeonato_form.dart';
+import 'gerenciar_campeonatos_page.dart';
+import 'ranking_campeonato_page.dart';
+import 'limpar_duplicados_page.dart';
+import 'gerenciar_equipes_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -14,6 +19,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   int _selectedIndex = 0;
   int? _selectedQuizSubMenu; // null = não está em submenu
+  int? _selectedChampionshipSubMenu;
 
   final List<String> _sections = [
     'Visão Geral',
@@ -23,6 +29,7 @@ class _DashboardPageState extends State<DashboardPage> {
     'Estatísticas',
     'Configurações',
     'Bible Quiz', // Novo menu principal
+    'Quiz Campeonato',
   ];
 
   final List<String> _quizSubMenus = [
@@ -33,6 +40,12 @@ class _DashboardPageState extends State<DashboardPage> {
     'Editar Questão',
     'Ranking',
     'Histórico de Participação',
+  ];
+
+  final List<String> _championshipSubMenus = [
+    'Criar Campeonato',
+    'Gerenciar Campeonatos',
+    'Ranking de Campeonato',
   ];
 
   @override
@@ -81,14 +94,23 @@ class _DashboardPageState extends State<DashboardPage> {
             onSelect: (i) => setState(() {
               _selectedIndex = i;
               _selectedQuizSubMenu = null;
+              _selectedChampionshipSubMenu = null;
             }),
             sections: _sections,
             selectedQuizSubMenu: _selectedQuizSubMenu,
             onQuizSubMenuSelect: (i) => setState(() {
               _selectedIndex = _sections.length - 1;
               _selectedQuizSubMenu = i;
+              _selectedChampionshipSubMenu = null;
             }),
             quizSubMenus: _quizSubMenus,
+            selectedChampionshipSubMenu: _selectedChampionshipSubMenu,
+            onChampionshipSubMenuSelect: (i) => setState(() {
+              _selectedIndex = _sections.length;
+              _selectedChampionshipSubMenu = i;
+              _selectedQuizSubMenu = null;
+            }),
+            championshipSubMenus: _championshipSubMenus,
           ),
           body: Container(
             width: double.infinity,
@@ -119,14 +141,23 @@ class _DashboardPageState extends State<DashboardPage> {
                           onSelect: (i) => setState(() {
                             _selectedIndex = i;
                             _selectedQuizSubMenu = null;
+                            _selectedChampionshipSubMenu = null;
                           }),
                           sections: _sections,
                           selectedQuizSubMenu: _selectedQuizSubMenu,
                           onQuizSubMenuSelect: (i) => setState(() {
                             _selectedIndex = _sections.length - 1;
                             _selectedQuizSubMenu = i;
+                            _selectedChampionshipSubMenu = null;
                           }),
                           quizSubMenus: _quizSubMenus,
+                          selectedChampionshipSubMenu: _selectedChampionshipSubMenu,
+                          onChampionshipSubMenuSelect: (i) => setState(() {
+                            _selectedIndex = _sections.length;
+                            _selectedChampionshipSubMenu = i;
+                            _selectedQuizSubMenu = null;
+                          }),
+                          championshipSubMenus: _championshipSubMenus,
                         ),
                       ),
                     Expanded(
@@ -134,7 +165,9 @@ class _DashboardPageState extends State<DashboardPage> {
                         padding: const EdgeInsets.all(16.0),
                         child: _selectedIndex == _sections.length - 1
                             ? _BibleQuizSection(index: _selectedQuizSubMenu)
-                            : _DashboardSection(index: _selectedIndex),
+                            : _selectedIndex == _sections.length
+                                ? _QuizChampionshipSection(index: _selectedChampionshipSubMenu)
+                                : _DashboardSection(index: _selectedIndex),
                       ),
                     ),
                   ],
@@ -155,6 +188,9 @@ class _DashboardDrawer extends StatelessWidget {
   final int? selectedQuizSubMenu;
   final Function(int)? onQuizSubMenuSelect;
   final List<String>? quizSubMenus;
+  final int? selectedChampionshipSubMenu;
+  final Function(int)? onChampionshipSubMenuSelect;
+  final List<String>? championshipSubMenus;
   const _DashboardDrawer({
     required this.selectedIndex,
     required this.onSelect,
@@ -162,6 +198,9 @@ class _DashboardDrawer extends StatelessWidget {
     this.selectedQuizSubMenu,
     this.onQuizSubMenuSelect,
     this.quizSubMenus,
+    this.selectedChampionshipSubMenu,
+    this.onChampionshipSubMenuSelect,
+    this.championshipSubMenus,
   });
 
   @override
@@ -174,6 +213,7 @@ class _DashboardDrawer extends StatelessWidget {
       Icons.bar_chart,
       Icons.settings,
       Icons.quiz, // Bible Quiz
+      Icons.emoji_events, // Quiz Campeonato
     ];
     return Drawer(
       child: ListView(
@@ -201,7 +241,7 @@ class _DashboardDrawer extends StatelessWidget {
           ),
           const Divider(),
           for (int i = 0; i < sections.length; i++)
-            if (sections[i] != 'Bible Quiz')
+            if (sections[i] != 'Bible Quiz' && sections[i] != 'Quiz Campeonato')
               ListTile(
                 leading: Icon(icons[i], color: selectedIndex == i ? Colors.deepPurple : null),
                 title: Text(sections[i], style: TextStyle(fontWeight: selectedIndex == i ? FontWeight.bold : FontWeight.normal)),
@@ -213,7 +253,7 @@ class _DashboardDrawer extends StatelessWidget {
               ),
           // Bible Quiz menu com submenus
           ExpansionTile(
-            leading: Icon(icons.last, color: selectedIndex == sections.length - 1 ? Colors.deepPurple : null),
+            leading: Icon(icons[6], color: selectedIndex == sections.length - 1 ? Colors.deepPurple : null),
             title: Text('Bible Quiz', style: TextStyle(fontWeight: selectedIndex == sections.length - 1 ? FontWeight.bold : FontWeight.normal)),
             initiallyExpanded: selectedIndex == sections.length - 1,
             children: [
@@ -224,6 +264,80 @@ class _DashboardDrawer extends StatelessWidget {
                   selected: selectedQuizSubMenu == i,
                   onTap: () {
                     onQuizSubMenuSelect?.call(i);
+                    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+                  },
+                ),
+            ],
+          ),
+          // Quiz Campeonato menu com submenus
+          ExpansionTile(
+            leading: Icon(icons[7], color: selectedIndex == sections.length ? Colors.deepPurple : null),
+            title: Text('Quiz Campeonato', style: TextStyle(fontWeight: selectedIndex == sections.length ? FontWeight.bold : FontWeight.normal)),
+            initiallyExpanded: selectedIndex == sections.length,
+            children: [
+              // Submenu Gerenciamento
+              ExpansionTile(
+                leading: const Icon(Icons.settings, color: Colors.deepPurple),
+                title: const Text('Gerenciamento', style: TextStyle(fontWeight: FontWeight.bold)),
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.manage_accounts),
+                    title: const Text('Gerenciar Campeonatos'),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const GerenciarCampeonatosPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.groups),
+                    title: const Text('Gerenciar Equipe'),
+                    onTap: () async {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const GerenciarEquipesPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.sports_kabaddi),
+                    title: const Text('Ver Confrontos'),
+                    onTap: () {
+                      // Aqui você pode abrir uma tela de seleção de campeonato antes de mostrar confrontos
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.leaderboard),
+                    title: const Text('Ver Ranking dos Grupos'),
+                    onTap: () {
+                      // Aqui você pode abrir uma tela de seleção de campeonato antes de mostrar ranking
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.cleaning_services),
+                    title: const Text('Limpar Duplicados'),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const LimparDuplicadosPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  // Adicione outros menus de gerenciamento aqui
+                ],
+              ),
+              // Outros submenus do Quiz Campeonato podem ficar aqui
+              for (int i = 0; i < (championshipSubMenus?.length ?? 0); i++)
+                ListTile(
+                  leading: Icon(Icons.arrow_right, color: selectedChampionshipSubMenu == i ? Colors.deepPurple : null),
+                  title: Text(championshipSubMenus![i], style: TextStyle(fontWeight: selectedChampionshipSubMenu == i ? FontWeight.bold : FontWeight.normal)),
+                  selected: selectedChampionshipSubMenu == i,
+                  onTap: () {
+                    onChampionshipSubMenuSelect?.call(i);
                     if (Navigator.of(context).canPop()) Navigator.of(context).pop();
                   },
                 ),
@@ -1479,7 +1593,7 @@ class _EditarQuestaoFormState extends State<EditarQuestaoForm> {
                       ),
                       icon: _saving
                           ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Icon(Icons.add, color: Colors.white),
+                          : const Icon(Icons.save, color: Colors.white),
                       label: const Text('Salvar Nova Questão', style: TextStyle(color: Colors.white)),
                       onPressed: _saving
                           ? null
@@ -1753,5 +1867,24 @@ class _RankingQuizFormState extends State<RankingQuizForm> {
         ),
       ),
     );
+  }
+}
+
+class _QuizChampionshipSection extends StatelessWidget {
+  final int? index;
+  const _QuizChampionshipSection({this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    switch (index) {
+      case 0:
+        return const CriarCampeonatoForm();
+      case 1:
+        return const GerenciarCampeonatosPage();
+      case 2:
+        return const RankingCampeonatoPage();
+      default:
+        return const Center(child: Text('Selecione uma opção do menu Quiz Campeonato'));
+    }
   }
 } 
