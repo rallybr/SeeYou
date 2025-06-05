@@ -14,7 +14,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 // - Melhorar responsividade para diferentes tamanhos de tela
 
 class BibleQuizPage extends StatefulWidget {
-  const BibleQuizPage({Key? key}) : super(key: key);
+  final String? quizId;
+  const BibleQuizPage({Key? key, this.quizId}) : super(key: key);
 
   @override
   State<BibleQuizPage> createState() => _BibleQuizPageState();
@@ -35,8 +36,7 @@ class _BibleQuizPageState extends State<BibleQuizPage>
   @override
   void initState() {
     super.initState();
-    // Defina o quizId aqui (fixo para teste ou via parâmetro futuramente)
-    quizId = null; // Exemplo: 'uuid-do-quiz';
+    quizId = widget.quizId;
     _fetchQuestions();
   }
 
@@ -134,29 +134,24 @@ class _BibleQuizPageState extends State<BibleQuizPage>
     final question = questions[currentQuestion];
     final questionId = question['id'];
     final optionId = question['optionIds'][index];
-    // Registrar participante se ainda não registrado
+    String? teamId;
+    // Se for quiz de campeonato, buscar o team_id do usuário
     if (quizId != null) {
-      final String quizIdLocal = quizId!;
-      final existingParticipant = await Supabase.instance.client
-        .from('quiz_participants')
-        .select()
-        .eq('user_id', user.id)
-        .eq('quiz_id', quizIdLocal)
+      // Buscar o championship_id do quiz
+      final quizData = await Supabase.instance.client
+        .from('quizzes')
+        .select('championship_id')
+        .eq('id', quizId!)
         .maybeSingle();
-      if (existingParticipant == null) {
-        try {
-          await Supabase.instance.client.from('quiz_participants').insert({
-            'user_id': user.id,
-            'quiz_id': quizIdLocal,
-          });
-        } catch (e) {
-          print('Erro ao registrar participante: $e');
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Erro ao registrar participação: $e')),
-            );
-          }
-        }
+      final championshipId = quizData?['championship_id'];
+      if (championshipId != null) {
+        // Buscar o team_id do usuário neste campeonato
+        final teamMember = await Supabase.instance.client
+          .from('quiz_team_members')
+          .select('team_id')
+          .eq('user_id', user.id)
+          .single();
+        teamId = teamMember['team_id'];
       }
     }
     // Verificar se já respondeu
@@ -231,6 +226,7 @@ class _BibleQuizPageState extends State<BibleQuizPage>
       'question_id': questionId,
       'option_id': optionId,
       'answered_at': DateTime.now().toIso8601String(),
+      if (teamId != null) 'team_id': teamId,
     });
     final bool acertou = index == question['answer'];
     setState(() {
@@ -284,19 +280,16 @@ class _BibleQuizPageState extends State<BibleQuizPage>
               ),
             ),
           ),
-          // Floating Home Button
+          // Botão de voltar sobreposto
           Positioned(
-            bottom: 24,
-            right: 24,
-            child: FloatingActionButton(
-              heroTag: 'homeBtn',
-              backgroundColor: Colors.white,
-              mini: true,
-              onPressed: () {
-                Navigator.of(context).pushNamedAndRemoveUntil('/feed', (route) => false);
-              },
-              child: const Icon(Icons.home, color: Color(0xFF2D2EFF), size: 28),
-              tooltip: 'Ir para Home',
+            top: 16,
+            left: 8,
+            child: SafeArea(
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 32),
+                onPressed: () => Navigator.of(context).pop(),
+                tooltip: 'Voltar',
+              ),
             ),
           ),
           SafeArea(

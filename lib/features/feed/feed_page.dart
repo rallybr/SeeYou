@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'dart:async';
+import '../bible_quiz/lista_quizzes_page.dart';
 
 class FeedPage extends StatefulWidget {
   const FeedPage({Key? key}) : super(key: key);
@@ -827,9 +828,8 @@ class _FeedListState extends State<_FeedList> {
                   // Banner de destaque antes da primeira postagem
                   return GestureDetector(
                     onTap: () {
-                      Navigator.of(context).pushNamed(
-                        '/bible_quiz',
-                        arguments: {'quizId': quizDestaque['id']},
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const ListaQuizzesPage()),
                       );
                     },
                     child: Container(

@@ -48,6 +48,50 @@ class _DashboardPageState extends State<DashboardPage> {
     'Ranking de Campeonato',
   ];
 
+  String? _championshipId;
+  List<Map<String, dynamic>> _championships = [];
+  List<Map<String, dynamic>> _quizzes = [];
+  bool _loading = true;
+  List<Map<String, dynamic>> _categorias = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCategorias();
+    _fetchChampionships();
+  }
+
+  Future<void> _fetchCategorias() async {
+    final data = await Supabase.instance.client
+        .from('quiz_categories')
+        .select('id, name');
+    setState(() {
+      _categorias = List<Map<String, dynamic>>.from(data);
+      _loading = false;
+    });
+  }
+
+  Future<void> _fetchChampionships() async {
+    final data = await Supabase.instance.client
+        .from('quiz_championships')
+        .select('id, title');
+    setState(() {
+      _championships = List<Map<String, dynamic>>.from(data);
+    });
+  }
+
+  Future<void> _fetchQuizzes() async {
+    var query = Supabase.instance.client.from('quizzes').select('id, title');
+    if (_championshipId != null) {
+      query = query.eq('championship_id', _championshipId!);
+    }
+    final data = await query;
+    setState(() {
+      _quizzes = List<Map<String, dynamic>>.from(data);
+      _loading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -611,7 +655,9 @@ class _CriarQuizFormState extends State<CriarQuizForm> {
   final _formKey = GlobalKey<FormState>();
   String? _titulo;
   String? _categoriaId;
+  String? _championshipId;
   List<Map<String, dynamic>> _categorias = [];
+  List<Map<String, dynamic>> _championships = [];
   bool _loading = true;
   bool _saving = false;
 
@@ -619,6 +665,7 @@ class _CriarQuizFormState extends State<CriarQuizForm> {
   void initState() {
     super.initState();
     _fetchCategorias();
+    _fetchChampionships();
   }
 
   Future<void> _fetchCategorias() async {
@@ -631,21 +678,45 @@ class _CriarQuizFormState extends State<CriarQuizForm> {
     });
   }
 
+  Future<void> _fetchChampionships() async {
+    final data = await Supabase.instance.client
+        .from('quiz_championships')
+        .select('id, title');
+    setState(() {
+      _championships = List<Map<String, dynamic>>.from(data);
+    });
+  }
+
   void _submit() async {
     if (!_formKey.currentState!.validate()) return;
     _formKey.currentState!.save();
     setState(() => _saving = true);
-    await Supabase.instance.client.from('quizzes').insert({
+    final quizData = {
       'title': _titulo,
       'category_id': _categoriaId,
       'created_by': Supabase.instance.client.auth.currentUser?.id,
-    });
-    setState(() => _saving = false);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quiz criado com sucesso!')),
-      );
-      // Aqui você pode navegar para a próxima etapa (adicionar questões)
+      'championship_id': _championshipId,
+    };
+    print('Tentando criar quiz com os dados:');
+    print(quizData);
+    try {
+      final response = await Supabase.instance.client.from('quizzes').insert(quizData).select().single();
+      print('Quiz criado: $response');
+      setState(() => _saving = false);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Quiz criado com sucesso!')),
+        );
+        // Aqui você pode navegar para a próxima etapa (adicionar questões)
+      }
+    } catch (e) {
+      print('Erro ao criar quiz: $e');
+      setState(() => _saving = false);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao criar quiz: $e')),
+        );
+      }
     }
   }
 
@@ -711,6 +782,25 @@ class _CriarQuizFormState extends State<CriarQuizForm> {
                 onChanged: (v) => setState(() => _categoriaId = v),
                 validator: (v) => v == null ? 'Selecione uma categoria' : null,
               ),
+              const SizedBox(height: 20),
+              DropdownButtonFormField<String>(
+                decoration: InputDecoration(
+                  labelText: 'Campeonato',
+                  prefixIcon: const Icon(Icons.emoji_events, color: Color(0xFF2D2EFF)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                value: _championshipId,
+                items: _championships
+                    .map<DropdownMenuItem<String>>((champ) => DropdownMenuItem<String>(
+                          value: champ['id'] as String,
+                          child: Text(champ['title']),
+                        ))
+                    .toList(),
+                onChanged: (v) => setState(() => _championshipId = v),
+                validator: (v) => v == null ? 'Selecione o campeonato' : null,
+              ),
               const SizedBox(height: 32),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
@@ -751,6 +841,7 @@ class _CriarQuestaoFormState extends State<CriarQuestaoForm> {
   List<Map<String, dynamic>> _quizzes = [];
   bool _loading = true;
   bool _saving = false;
+  String? _championshipId;
 
   @override
   void initState() {
@@ -759,9 +850,11 @@ class _CriarQuestaoFormState extends State<CriarQuestaoForm> {
   }
 
   Future<void> _fetchQuizzes() async {
-    final data = await Supabase.instance.client
-        .from('quizzes')
-        .select('id, title');
+    var query = Supabase.instance.client.from('quizzes').select('id, title');
+    if (_championshipId != null) {
+      query = query.eq('championship_id', _championshipId!);
+    }
+    final data = await query;
     setState(() {
       _quizzes = List<Map<String, dynamic>>.from(data);
       _loading = false;
@@ -958,6 +1051,7 @@ class _AprovarQuizFormState extends State<AprovarQuizForm> {
     final data = await Supabase.instance.client
         .from('quizzes')
         .select('id, title, category_id, created_by, aprovado, destaque')
+        .or('aprovado.is.false,aprovado.is.null')
         .order('created_at', ascending: false);
     setState(() {
       _quizzes = List<Map<String, dynamic>>.from(data);
@@ -1012,6 +1106,8 @@ class _AprovarQuizFormState extends State<AprovarQuizForm> {
       return const Center(child: Text('Nenhum quiz cadastrado.'));
     }
     return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(24),
       itemCount: _quizzes.length,
       separatorBuilder: (_, __) => const SizedBox(height: 20),
@@ -1322,6 +1418,7 @@ class _EditarQuestaoFormState extends State<EditarQuestaoForm> {
       List.generate(4, (_) => TextEditingController());
   int? _correctIndex;
   bool _saving = false;
+  String? _championshipId;
 
   @override
   void initState() {
@@ -1330,12 +1427,13 @@ class _EditarQuestaoFormState extends State<EditarQuestaoForm> {
   }
 
   Future<void> _fetchQuizzes() async {
-    final quizzes = await Supabase.instance.client
-        .from('quizzes')
-        .select('id, title')
-        .order('created_at', ascending: false);
+    var query = Supabase.instance.client.from('quizzes').select('id, title');
+    if (_championshipId != null) {
+      query = query.eq('championship_id', _championshipId!);
+    }
+    final data = await query;
     setState(() {
-      _quizzes = List<Map<String, dynamic>>.from(quizzes);
+      _quizzes = List<Map<String, dynamic>>.from(data);
       _loading = false;
     });
   }
