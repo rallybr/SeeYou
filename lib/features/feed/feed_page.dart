@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'dart:async';
 import '../bible_quiz/lista_quizzes_page.dart';
+import '../equipe/lista_equipes_page.dart';
 
 class FeedPage extends StatefulWidget {
   const FeedPage({Key? key}) : super(key: key);
@@ -821,11 +822,15 @@ class _FeedListState extends State<_FeedList> {
             final quizDestaque = quizSnapshot.data;
             return ListView.separated(
               padding: EdgeInsets.zero,
-              itemCount: posts.length + (quizDestaque != null ? 1 : 0),
+              itemCount: posts.length + (quizDestaque != null ? 1 : 0) + 1,
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, i) {
-                if (quizDestaque != null && i == 0) {
-                  // Banner de destaque antes da primeira postagem
+                final totalPosts = posts.length;
+                final hasQuizDestaque = quizDestaque != null;
+                final bannerIndex = hasQuizDestaque ? 2 : 1;
+
+                if (hasQuizDestaque && i == 0) {
+                  // Banner do Bible Quiz
                   return GestureDetector(
                     onTap: () {
                       Navigator.of(context).push(
@@ -888,7 +893,78 @@ class _FeedListState extends State<_FeedList> {
                     ),
                   );
                 }
-                final postIndex = quizDestaque != null ? i - 1 : i;
+                if (i == bannerIndex) {
+                  // Banner do Campeonato Quiz
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const ListaEquipesPage()),
+                      );
+                    },
+                    child: Container(
+                      height: 100,
+                      width: double.infinity,
+                      margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF7B2FF2), Color(0xFF2D2EFF), Color(0xFFE94057)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 8,
+                            offset: Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 16),
+                          const Icon(Icons.emoji_events, color: Colors.amber, size: 32),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  'Participe do Campeonato Quiz!',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 6),
+                                Text(
+                                  'Escolha uma Equipe',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.play_arrow, color: Colors.white, size: 28),
+                          const SizedBox(width: 16),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                // Ajuste de índice para posts reais
+                int postIndex = i;
+                if (hasQuizDestaque) postIndex -= 1;
+                if (i > bannerIndex) postIndex -= 1;
+                if (postIndex < 0 || postIndex >= totalPosts) {
+                  return const SizedBox.shrink();
+                }
                 final post = posts[postIndex];
                 final user = post['profiles'] ?? {};
                 dynamic mediaUrls = post['media_urls'];

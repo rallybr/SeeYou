@@ -12,6 +12,8 @@ class _LimparDuplicadosPageState extends State<LimparDuplicadosPage> {
   String? _selectedType;
   List<Map<String, dynamic>> _duplicates = [];
   bool _loading = false;
+  Map<String, String> _championshipNames = {}; // id -> nome
+  Map<String, int> _groupTeamCounts = {}; // group_id -> quantidade de equipes
 
   final List<String> _types = [
     'Grupos Duplicados',
@@ -31,6 +33,23 @@ class _LimparDuplicadosPageState extends State<LimparDuplicadosPage> {
           .from('quiz_groups')
           .select('id, name, championship_id')
           .order('championship_id');
+      // Buscar nomes dos campeonatos
+      final championships = await Supabase.instance.client
+          .from('quiz_championships')
+          .select('id, title');
+      _championshipNames = {for (var c in championships) c['id']: c['title'] ?? ''};
+      // Buscar quantidade de equipes por grupo
+      final groupTeams = await Supabase.instance.client
+          .from('quiz_group_teams')
+          .select('group_id');
+      final Map<String, int> groupTeamCounts = {};
+      for (final gt in groupTeams) {
+        final gid = gt['group_id'];
+        if (gid != null) {
+          groupTeamCounts[gid] = (groupTeamCounts[gid] ?? 0) + 1;
+        }
+      }
+      _groupTeamCounts = groupTeamCounts;
       // Lógica para identificar duplicados (exemplo: mesmo nome e championship_id)
       final Map<String, List<Map<String, dynamic>>> groups = {};
       for (var group in data) {
@@ -201,9 +220,25 @@ class _LimparDuplicadosPageState extends State<LimparDuplicadosPage> {
                     itemCount: _duplicates.length,
                     itemBuilder: (context, index) {
                       final item = _duplicates[index];
+                      String? championshipName;
+                      if (_selectedType == 'Grupos Duplicados') {
+                        championshipName = _championshipNames[item['championship_id']] ?? '';
+                      }
+                      int? teamCount;
+                      if (_selectedType == 'Grupos Duplicados') {
+                        teamCount = _groupTeamCounts[item['id']] ?? 0;
+                      }
                       return ListTile(
-                        title: Text(item['name'] ?? 'Confronto \\${item['id']}'),
-                        subtitle: Text('ID: \\${item['id']}'),
+                        title: Text(
+                          item['name'] ?? 'Confronto \\${item['id']}',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: _selectedType == 'Grupos Duplicados'
+                            ? Text(
+                                '${(championshipName != null && championshipName.isNotEmpty) ? 'Campeonato: $championshipName' : 'Campeonato não encontrado'}\nEquipes: $teamCount',
+                                style: const TextStyle(color: Colors.white70),
+                              )
+                            : Text('ID: \\${item['id']}'),
                         trailing: _selectedType == 'Grupos Duplicados'
                             ? IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red),

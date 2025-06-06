@@ -93,11 +93,27 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
     }
   }
 
-  void _selecionarCampeonato(Map<String, dynamic> campeonato) {
+  void _selecionarCampeonato(Map<String, dynamic> campeonato) async {
     setState(() {
       _campeonatoSelecionado = campeonato;
+      _grupos = [];
+      _equipesPorGrupo = {};
+      _confrontos = [];
     });
-    _fetchEquipes();
+    await _fetchEquipes();
+    await _fetchGrupos();
+  }
+
+  Future<void> _fetchGrupos() async {
+    if (_campeonatoSelecionado == null) return;
+    final campeonatoId = _campeonatoSelecionado!['id'] as String;
+    final grupos = await Supabase.instance.client
+        .from('quiz_groups')
+        .select('id, name')
+        .eq('championship_id', campeonatoId);
+    setState(() {
+      _grupos = List<Map<String, dynamic>>.from(grupos);
+    });
   }
 
   Future<void> _sortearEquipesNosGrupos() async {
@@ -339,316 +355,438 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
     return res;
   }
 
+  Future<void> _criarGrupos() async {
+    if (_campeonatoSelecionado == null) return;
+    setState(() => _loading = true);
+    final campeonatoId = _campeonatoSelecionado!['id'] as String;
+    try {
+      // Buscar grupos já existentes
+      final gruposExistentes = await Supabase.instance.client
+          .from('quiz_groups')
+          .select('id, name')
+          .eq('championship_id', campeonatoId);
+      print('Grupos existentes:');
+      print(gruposExistentes);
+      if (gruposExistentes != null && gruposExistentes.isNotEmpty) {
+        setState(() {
+          _grupos = List<Map<String, dynamic>>.from(gruposExistentes);
+          _loading = false;
+        });
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Os grupos já existem para este campeonato!')),
+          );
+        }
+        return;
+      }
+      final numGrupos = _campeonatoSelecionado!['num_groups'] as int;
+      List<Map<String, dynamic>> gruposCriados = [];
+      for (int i = 0; i < numGrupos; i++) {
+        final nomeGrupo = 'Grupo ${String.fromCharCode(65 + i)}';
+        print('Criando grupo: $nomeGrupo');
+        final grupo = await Supabase.instance.client
+            .from('quiz_groups')
+            .insert({
+              'name': nomeGrupo,
+              'championship_id': campeonatoId,
+            })
+            .select()
+            .single();
+        print('Grupo criado: $grupo');
+        gruposCriados.add(grupo);
+      }
+      // Buscar novamente os grupos do banco para garantir atualização
+      final gruposAtualizados = await Supabase.instance.client
+          .from('quiz_groups')
+          .select('id, name')
+          .eq('championship_id', campeonatoId);
+      print('Grupos atualizados:');
+      print(gruposAtualizados);
+      setState(() {
+        _grupos = List<Map<String, dynamic>>.from(gruposAtualizados);
+        _loading = false;
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Grupos criados com sucesso!')),
+        );
+      }
+    } catch (e, s) {
+      print('Erro ao criar grupos: $e');
+      print(s);
+      setState(() => _loading = false);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao criar grupos: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _resetarGrupos() async {
+    if (_campeonatoSelecionado == null) return;
+    final campeonatoId = _campeonatoSelecionado!['id'] as String;
+    setState(() => _loading = true);
+    try {
+      // Buscar grupos do campeonato
+      final grupos = await Supabase.instance.client
+          .from('quiz_groups')
+          .select('id')
+          .eq('championship_id', campeonatoId);
+      final groupIds = grupos.map((g) => g['id']).toList();
+      print('RESET: Grupos encontrados para excluir:');
+      print(groupIds);
+      // Excluir confrontos e relações
+      if (groupIds.isNotEmpty) {
+        final del1 = await Supabase.instance.client
+            .from('quiz_group_teams')
+            .delete()
+            .inFilter('group_id', groupIds);
+        print('RESET: quiz_group_teams excluídos:');
+        print(del1);
+        final del2 = await Supabase.instance.client
+            .from('quiz_matches')
+            .delete()
+            .inFilter('group_id', groupIds);
+        print('RESET: quiz_matches excluídos:');
+        print(del2);
+        final del3 = await Supabase.instance.client
+            .from('quiz_groups')
+            .delete()
+            .inFilter('id', groupIds);
+        print('RESET: quiz_groups excluídos:');
+        print(del3);
+      }
+      // Buscar novamente os grupos do banco para garantir atualização
+      final gruposAtualizados = await Supabase.instance.client
+          .from('quiz_groups')
+          .select('id, name')
+          .eq('championship_id', campeonatoId);
+      setState(() {
+        _grupos = List<Map<String, dynamic>>.from(gruposAtualizados);
+        _equipesPorGrupo = {};
+        _confrontos = [];
+        _loading = false;
+      });
+      print('RESET: Grupos após exclusão:');
+      print(_grupos);
+      // Forçar rebuild para garantir que o botão Criar Grupos apareça
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (mounted) setState(() {});
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Grupos resetados com sucesso!')),
+        );
+      }
+    } catch (e) {
+      setState(() => _loading = false);
+      print('RESET: Erro ao resetar grupos: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao resetar grupos: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    print('DEBUG: Quantidade de grupos no build: ${_grupos.length}');
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_campeonatoSelecionado == null) {
-      return Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF2D2EFF),
-              Color(0xFF7B2FF2),
-              Color(0xFFE94057),
-            ],
-          ),
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Gerenciar Campeonatos'),
+          backgroundColor: const Color(0xFF2D2EFF),
         ),
-        child: Center(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 32),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.dashboard, color: Color(0xFF2D2EFF)),
-                  label: const Text('Voltar ao Dashboard', style: TextStyle(color: Color(0xFF2D2EFF), fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    elevation: 6,
-                    shadowColor: Color(0xFF2D2EFF).withOpacity(0.18),
-                    side: const BorderSide(color: Color(0xFF7B2FF2), width: 1.5),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).pushNamedAndRemoveUntil('/admin', (route) => false);
-                  },
-                ),
-                const SizedBox(height: 32),
-                const Text('Gerencie um Campeonato', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-                const SizedBox(height: 24),
-                ..._campeonatos.map((c) => Card(
-                  elevation: 4,
-                  margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                  child: ListTile(
-                    leading: const Icon(Icons.emoji_events, color: Color(0xFF2D2EFF)),
-                    title: Text(c['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('Equipes: ${c['num_teams']}  |  Grupos: ${c['num_groups']}  |  Status: ${c['status'] ?? 'indefinido'}'),
-                    trailing: const Icon(Icons.arrow_forward_ios),
-                    onTap: () => _selecionarCampeonato(c),
-                  ),
-                )),
-                if (_campeonatos.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text('Nenhum campeonato cadastrado.', style: TextStyle(fontSize: 18)),
-                  ),
-              ],
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2D2EFF), Color(0xFF7B2FF2), Color(0xFFE94057)],
             ),
+          ),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              ..._campeonatos.map((c) => Card(
+                    elevation: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    child: ListTile(
+                      leading: const Icon(Icons.emoji_events, color: Color(0xFF2D2EFF)),
+                      title: Text(c['title'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Equipes: ${c['num_teams']}  |  Grupos: ${c['num_groups']}  |  Status: ${c['status'] ?? 'indefinido'}'),
+                      trailing: const Icon(Icons.arrow_forward_ios),
+                      onTap: () => _selecionarCampeonato(c),
+                    ),
+                  )),
+              if (_campeonatos.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Text('Nenhum campeonato cadastrado.', style: TextStyle(fontSize: 18)),
+                ),
+            ],
           ),
         ),
       );
     } else {
       // Painel de gerenciamento do campeonato selecionado
-      return Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF2D2EFF),
-              Color(0xFF7B2FF2),
-              Color(0xFFE94057),
-            ],
-          ),
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(_campeonatoSelecionado!['title'] ?? 'Gerenciar Campeonato'),
+          backgroundColor: const Color(0xFF2D2EFF),
         ),
-        child: Material(
-          color: Colors.transparent,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text('Gerenciando: ${_campeonatoSelecionado!['title']}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.sports_kabaddi, color: Color(0xFF2D2EFF)),
-                  label: const Text('Ver Confrontos', style: TextStyle(color: Color(0xFF2D2EFF), fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    elevation: 6,
-                    shadowColor: Color(0xFF2D2EFF).withOpacity(0.18),
-                    side: const BorderSide(color: Color(0xFF7B2FF2), width: 1.5),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => ConfrontosCampeonatoPage(
-                          championshipId: _campeonatoSelecionado!['id'],
-                        ),
-                      ),
-                    );
-                  },
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF2D2EFF), Color(0xFF7B2FF2), Color(0xFFE94057)],
+            ),
+          ),
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.leaderboard, color: Color(0xFF2D2EFF)),
+                label: const Text('Ver Ranking dos Grupos', style: TextStyle(color: Color(0xFF2D2EFF), fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  elevation: 6,
+                  shadowColor: Color(0xFF2D2EFF).withOpacity(0.18),
+                  side: const BorderSide(color: Color(0xFF7B2FF2), width: 1.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.leaderboard, color: Color(0xFF2D2EFF)),
-                  label: const Text('Ver Ranking dos Grupos', style: TextStyle(color: Color(0xFF2D2EFF), fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    elevation: 6,
-                    shadowColor: Color(0xFF2D2EFF).withOpacity(0.18),
-                    side: const BorderSide(color: Color(0xFF7B2FF2), width: 1.5),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => RankingCampeonatoPage(
-                          championshipId: _campeonatoSelecionado!['id'],
-                        ),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => RankingCampeonatoPage(
+                        championshipId: _campeonatoSelecionado!['id'],
                       ),
-                    );
-                  },
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              // Formulário de cadastro de equipe
+              Card(
+                elevation: 6,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Form(
+                    key: _formEquipeKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Cadastrar Nova Equipe', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          decoration: InputDecoration(
+                            labelText: 'Nome da Equipe',
+                            prefixIcon: const Icon(Icons.flag, color: Color(0xFF2D2EFF)),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                          validator: (v) => v == null || v.isEmpty ? 'Obrigatório' : null,
+                          onSaved: (v) => _nomeEquipe = v,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          decoration: InputDecoration(
+                            labelText: 'Localidade',
+                            prefixIcon: const Icon(Icons.location_city, color: Color(0xFF7B2FF2)),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                          validator: (v) => v == null || v.isEmpty ? 'Obrigatório' : null,
+                          onSaved: (v) => _localidadeEquipe = v,
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          decoration: InputDecoration(
+                            labelText: 'URL do Logo (opcional)',
+                            prefixIcon: const Icon(Icons.image, color: Color(0xFFE94057)),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                          onSaved: (v) => _logoEquipe = v,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.save, color: Colors.white),
+                          label: const Text('Salvar Equipe', style: TextStyle(color: Colors.white)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2D2EFF),
+                            elevation: 6,
+                            shadowColor: Color(0xFF2D2EFF).withOpacity(0.18),
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          onPressed: _salvandoEquipe ? null : _adicionarEquipe,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
+              ),
+              const SizedBox(height: 24),
+              // Lista de equipes
+              Card(
+                elevation: 6,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Equipes Cadastradas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 16),
+                      _loadingEquipes
+                          ? const CircularProgressIndicator()
+                          : _equipes.isEmpty
+                              ? const Text('Nenhuma equipe cadastrada ainda.')
+                              : Column(
+                                  children: [
+                                    for (final equipe in _equipes)
+                                      ListTile(
+                                        leading: equipe['logo_url'] != null && equipe['logo_url'].toString().isNotEmpty
+                                            ? CircleAvatar(backgroundImage: NetworkImage(equipe['logo_url']))
+                                            : const CircleAvatar(child: Icon(Icons.flag)),
+                                        title: Text(equipe['name'] ?? ''),
+                                        subtitle: Text(equipe['location'] ?? ''),
+                                      ),
+                                  ],
+                                ),
+                    ],
+                  ),
+                ),
+              ),
+              // Botão Criar Grupos destacado após lista de equipes
+              if (_grupos.isEmpty) ...[
                 const SizedBox(height: 24),
-                // Formulário de cadastro de equipe
                 Card(
+                  color: Color(0xFF2D2EFF).withOpacity(0.08),
                   elevation: 4,
-                  margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Form(
-                      key: _formEquipeKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text('Cadastrar Nova Equipe', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            decoration: const InputDecoration(
-                              labelText: 'Nome da Equipe',
-                              prefixIcon: Icon(Icons.flag),
-                            ),
-                            validator: (v) => v == null || v.isEmpty ? 'Obrigatório' : null,
-                            onSaved: (v) => _nomeEquipe = v,
-                          ),
-                          const SizedBox(height: 10),
-                          TextFormField(
-                            decoration: const InputDecoration(
-                              labelText: 'Localidade',
-                              prefixIcon: Icon(Icons.location_on),
-                            ),
-                            onSaved: (v) => _localidadeEquipe = v,
-                          ),
-                          const SizedBox(height: 10),
-                          TextFormField(
-                            decoration: const InputDecoration(
-                              labelText: 'URL do Logo (opcional)',
-                              prefixIcon: Icon(Icons.image),
-                            ),
-                            onSaved: (v) => _logoEquipe = v,
-                          ),
-                          const SizedBox(height: 16),
-                          ElevatedButton.icon(
-                            icon: _salvandoEquipe
-                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                : const Icon(Icons.add),
-                            label: const Text('Adicionar Equipe'),
-                            onPressed: _salvandoEquipe ? null : _adicionarEquipe,
-                          ),
-                        ],
+                    padding: const EdgeInsets.all(16),
+                    child: Center(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.add_circle),
+                        label: const Text('Criar Grupos'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2D2EFF),
+                          foregroundColor: Colors.white,
+                          elevation: 6,
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        onPressed: () => _criarGrupos(),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                // Listagem das equipes cadastradas
-                const Text('Equipes Cadastradas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              ],
+              // Exibir grupos criados (antes do sorteio)
+              if (_grupos.isNotEmpty && _equipesPorGrupo.isEmpty) ...[
+                const SizedBox(height: 16),
+                const Text('Grupos Criados', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
                 const SizedBox(height: 8),
-                _loadingEquipes
-                    ? const CircularProgressIndicator()
-                    : _equipes.isEmpty
-                        ? const Text('Nenhuma equipe cadastrada ainda.')
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _equipes.length,
-                            itemBuilder: (context, i) {
-                              final equipe = _equipes[i];
-                              return ListTile(
-                                leading: equipe['logo_url'] != null && equipe['logo_url'].toString().isNotEmpty
-                                    ? CircleAvatar(backgroundImage: NetworkImage(equipe['logo_url']))
-                                    : const CircleAvatar(child: Icon(Icons.flag)),
-                                title: Text(equipe['name'] ?? ''),
-                                subtitle: Text(equipe['location'] ?? ''),
-                              );
-                            },
-                          ),
-                const SizedBox(height: 24),
-                // Botão para sorteio dos grupos (a lógica será implementada em seguida)
+                ..._grupos.map((grupo) => Card(
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Text(grupo['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      ),
+                    )),
+                const SizedBox(height: 16),
                 ElevatedButton.icon(
                   icon: const Icon(Icons.shuffle),
-                  label: const Text('Sortear Equipes nos Grupos'),
+                  label: const Text('Distribuir Equipes nos Grupos'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2D2EFF),
+                    foregroundColor: Colors.white,
+                    elevation: 6,
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
                   onPressed: _equipes.length == (_campeonatoSelecionado!['num_teams'] ?? 0) && !_sorteando
                       ? _sortearEquipesNosGrupos
                       : null,
                 ),
-                const SizedBox(height: 24),
-                if (_grupos.isNotEmpty)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 24),
-                      const Text('Resultado do Sorteio', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      const SizedBox(height: 8),
-                      ..._grupos.map((grupo) => Card(
-                            margin: const EdgeInsets.symmetric(vertical: 8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(grupo['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                  const SizedBox(height: 6),
-                                  ...(_equipesPorGrupo[grupo['id']] ?? []).map((equipe) => Row(
-                                        children: [
-                                          equipe['logo_url'] != null && equipe['logo_url'].toString().isNotEmpty
-                                              ? CircleAvatar(backgroundImage: NetworkImage(equipe['logo_url']), radius: 14)
-                                              : const CircleAvatar(child: Icon(Icons.flag), radius: 14),
-                                          const SizedBox(width: 8),
-                                          Text(equipe['name'] ?? '', style: const TextStyle(fontSize: 15)),
-                                          if ((equipe['location'] ?? '').toString().isNotEmpty) ...[
-                                            const SizedBox(width: 6),
-                                            Text('(${equipe['location']})', style: const TextStyle(fontSize: 13, color: Colors.grey)),
-                                          ]
-                                        ],
-                                      )),
-                                ],
-                              ),
-                            ),
-                          )),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.sports_kabaddi),
-                        label: const Text('Gerar Confrontos'),
-                        onPressed: !_gerandoConfrontos && _confrontos.isEmpty ? _gerarConfrontos : null,
-                      ),
-                      if (_confrontos.isNotEmpty) ...[
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Atualizar Resultados'),
-                          onPressed: _salvandoResultado ? null : _atualizarResultadosAutomaticamente,
-                        ),
-                        const SizedBox(height: 16),
-                        const Text('Confrontos Gerados', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(height: 8),
-                        ..._confrontos.map((c) {
-                          final id = c['id'].toString();
-                          final team1Name = _teamNames[c['team1_id']] ?? 'Equipe 1';
-                          final team2Name = _teamNames[c['team2_id']] ?? 'Equipe 2';
-                          final groupName = _groupNames[c['group_id']] ?? '';
-                          return FutureBuilder<Map<String, dynamic>?>(
-                            future: _buscarResultadoConfronto(id),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData || snapshot.data == null) {
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(vertical: 6),
-                                  child: ListTile(
-                                    leading: const Icon(Icons.sports_kabaddi),
-                                    title: Text('$team1Name x $team2Name'),
-                                    subtitle: Text(groupName),
-                                    trailing: const Text('Pendente', style: TextStyle(color: Colors.orange)),
-                                  ),
-                                );
-                              }
-                              final resultado = snapshot.data!;
-                              return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 6),
-                                child: ListTile(
-                                  leading: const Icon(Icons.sports_kabaddi),
-                                  title: Text('$team1Name x $team2Name'),
-                                  subtitle: Text(groupName),
-                                  trailing: Text(
-                                    '$team1Name ${resultado['team1_score'] ?? 0} : ${resultado['team2_score'] ?? 0} $team2Name',
-                                    style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        }),
-                      ],
-                    ],
-                  ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 ElevatedButton.icon(
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('Voltar'),
-                  onPressed: () => setState(() => _campeonatoSelecionado = null),
+                  icon: const Icon(Icons.delete_forever, color: Colors.red),
+                  label: const Text('Resetar Grupos', style: TextStyle(color: Colors.red)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    elevation: 4,
+                    side: const BorderSide(color: Colors.red, width: 1.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: _resetarGrupos,
                 ),
               ],
-            ),
+              // Exibir equipes sorteadas em cada grupo
+              if (_grupos.isNotEmpty && _equipesPorGrupo.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                const Text('Equipes Sorteadas nos Grupos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                const SizedBox(height: 8),
+                ..._grupos.map((grupo) => Card(
+                      margin: const EdgeInsets.symmetric(vertical: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(grupo['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            const SizedBox(height: 6),
+                            ...(_equipesPorGrupo[grupo['id']] ?? []).map((equipe) => Row(
+                                  children: [
+                                    equipe['logo_url'] != null && equipe['logo_url'].toString().isNotEmpty
+                                        ? CircleAvatar(backgroundImage: NetworkImage(equipe['logo_url']), radius: 14)
+                                        : const CircleAvatar(child: Icon(Icons.flag), radius: 14),
+                                    const SizedBox(width: 8),
+                                    Text(equipe['name'] ?? '', style: const TextStyle(fontSize: 15)),
+                                    if ((equipe['location'] ?? '').toString().isNotEmpty) ...[
+                                      const SizedBox(width: 6),
+                                      Text('(${equipe['location']})', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                                    ]
+                                  ],
+                                )),
+                          ],
+                        ),
+                      ),
+                    )),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.sports_kabaddi),
+                  label: const Text('Gerar Confrontos'),
+                  onPressed: !_gerandoConfrontos && _confrontos.isEmpty ? _gerarConfrontos : null,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.delete_forever, color: Colors.red),
+                  label: const Text('Resetar Grupos', style: TextStyle(color: Colors.red)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    elevation: 4,
+                    side: const BorderSide(color: Colors.red, width: 1.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                  onPressed: _resetarGrupos,
+                ),
+              ],
+            ],
           ),
         ),
       );

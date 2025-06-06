@@ -8,6 +8,8 @@ import 'gerenciar_campeonatos_page.dart';
 import 'ranking_campeonato_page.dart';
 import 'limpar_duplicados_page.dart';
 import 'gerenciar_equipes_page.dart';
+import 'gerenciar_participantes_page.dart';
+import 'confrontos_campeonato_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
@@ -265,7 +267,7 @@ class _DashboardDrawer extends StatelessWidget {
         children: [
           DrawerHeader(
             decoration: const BoxDecoration(
-              color: Colors.deepPurple,
+              color: Color(0xFFB71C1C),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,8 +279,8 @@ class _DashboardDrawer extends StatelessWidget {
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.home, color: Colors.deepPurple),
-            title: const Text('Home', style: TextStyle(fontWeight: FontWeight.bold)),
+            leading: const Icon(Icons.home, color: Color(0xFFB71C1C)),
+            title: const Text('Home', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFB71C1C))),
             onTap: () {
               Navigator.of(context).pushNamedAndRemoveUntil('/feed', (route) => false);
             },
@@ -287,8 +289,8 @@ class _DashboardDrawer extends StatelessWidget {
           for (int i = 0; i < sections.length; i++)
             if (sections[i] != 'Bible Quiz' && sections[i] != 'Quiz Campeonato')
               ListTile(
-                leading: Icon(icons[i], color: selectedIndex == i ? Colors.deepPurple : null),
-                title: Text(sections[i], style: TextStyle(fontWeight: selectedIndex == i ? FontWeight.bold : FontWeight.normal)),
+                leading: Icon(icons[i], color: Color(0xFFB71C1C)),
+                title: Text(sections[i], style: TextStyle(fontWeight: selectedIndex == i ? FontWeight.bold : FontWeight.normal, color: Color(0xFFB71C1C))),
                 selected: selectedIndex == i,
                 onTap: () {
                   onSelect(i);
@@ -297,14 +299,14 @@ class _DashboardDrawer extends StatelessWidget {
               ),
           // Bible Quiz menu com submenus
           ExpansionTile(
-            leading: Icon(icons[6], color: selectedIndex == sections.length - 1 ? Colors.deepPurple : null),
-            title: Text('Bible Quiz', style: TextStyle(fontWeight: selectedIndex == sections.length - 1 ? FontWeight.bold : FontWeight.normal)),
+            leading: Icon(icons[6], color: Color(0xFFB71C1C)),
+            title: Text('Bible Quiz', style: TextStyle(fontWeight: selectedIndex == sections.length - 1 ? FontWeight.bold : FontWeight.normal, color: Color(0xFFB71C1C))),
             initiallyExpanded: selectedIndex == sections.length - 1,
             children: [
               for (int i = 0; i < (quizSubMenus?.length ?? 0); i++)
                 ListTile(
-                  leading: Icon(Icons.arrow_right, color: selectedQuizSubMenu == i ? Colors.deepPurple : null),
-                  title: Text(quizSubMenus![i], style: TextStyle(fontWeight: selectedQuizSubMenu == i ? FontWeight.bold : FontWeight.normal)),
+                  leading: Icon(Icons.arrow_right, color: Color(0xFF2D2EFF)),
+                  title: Text(quizSubMenus![i], style: TextStyle(fontWeight: selectedQuizSubMenu == i ? FontWeight.bold : FontWeight.normal, color: Color(0xFF2D2EFF))),
                   selected: selectedQuizSubMenu == i,
                   onTap: () {
                     onQuizSubMenuSelect?.call(i);
@@ -315,18 +317,18 @@ class _DashboardDrawer extends StatelessWidget {
           ),
           // Quiz Campeonato menu com submenus
           ExpansionTile(
-            leading: Icon(icons[7], color: selectedIndex == sections.length ? Colors.deepPurple : null),
-            title: Text('Quiz Campeonato', style: TextStyle(fontWeight: selectedIndex == sections.length ? FontWeight.bold : FontWeight.normal)),
+            leading: Icon(icons[7], color: Color(0xFFB71C1C)),
+            title: Text('Quiz Campeonato', style: TextStyle(fontWeight: selectedIndex == sections.length ? FontWeight.bold : FontWeight.normal, color: Color(0xFFB71C1C))),
             initiallyExpanded: selectedIndex == sections.length,
             children: [
               // Submenu Gerenciamento
               ExpansionTile(
-                leading: const Icon(Icons.settings, color: Colors.deepPurple),
-                title: const Text('Gerenciamento', style: TextStyle(fontWeight: FontWeight.bold)),
+                leading: const Icon(Icons.settings, color: Color(0xFFB71C1C)),
+                title: const Text('Gerenciamento', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFB71C1C))),
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.manage_accounts),
-                    title: const Text('Gerenciar Campeonatos'),
+                    leading: const Icon(Icons.manage_accounts, color: Color(0xFF2D2EFF)),
+                    title: const Text('Gerenciar Campeonatos', style: TextStyle(color: Color(0xFF2D2EFF))),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -336,8 +338,8 @@ class _DashboardDrawer extends StatelessWidget {
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.groups),
-                    title: const Text('Gerenciar Equipe'),
+                    leading: const Icon(Icons.groups, color: Color(0xFF2D2EFF)),
+                    title: const Text('Gerenciar Equipe', style: TextStyle(color: Color(0xFF2D2EFF))),
                     onTap: () async {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -347,22 +349,37 @@ class _DashboardDrawer extends StatelessWidget {
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.sports_kabaddi),
-                    title: const Text('Ver Confrontos'),
-                    onTap: () {
-                      // Aqui você pode abrir uma tela de seleção de campeonato antes de mostrar confrontos
+                    leading: const Icon(Icons.group_add, color: Color(0xFF2D2EFF)),
+                    title: const Text('Gerenciar Participantes', style: TextStyle(color: Color(0xFF2D2EFF))),
+                    onTap: () async {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const GerenciarParticipantesPage(),
+                        ),
+                      );
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.leaderboard),
-                    title: const Text('Ver Ranking dos Grupos'),
+                    leading: const Icon(Icons.sports_kabaddi, color: Color(0xFF2D2EFF)),
+                    title: const Text('Ver Confrontos', style: TextStyle(color: Color(0xFF2D2EFF))),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const ConfrontosCampeonatoPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.leaderboard, color: Color(0xFF2D2EFF)),
+                    title: const Text('Ver Ranking dos Grupos', style: TextStyle(color: Color(0xFF2D2EFF))),
                     onTap: () {
                       // Aqui você pode abrir uma tela de seleção de campeonato antes de mostrar ranking
                     },
                   ),
                   ListTile(
-                    leading: const Icon(Icons.cleaning_services),
-                    title: const Text('Limpar Duplicados'),
+                    leading: const Icon(Icons.cleaning_services, color: Color(0xFF2D2EFF)),
+                    title: const Text('Limpar Duplicados', style: TextStyle(color: Color(0xFF2D2EFF))),
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -371,20 +388,72 @@ class _DashboardDrawer extends StatelessWidget {
                       );
                     },
                   ),
-                  // Adicione outros menus de gerenciamento aqui
+                  ListTile(
+                    leading: const Icon(Icons.add_box, color: Color(0xFF2D2EFF)),
+                    title: const Text('Criar Campeonato', style: TextStyle(color: Color(0xFF2D2EFF))),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => Scaffold(
+                            appBar: AppBar(
+                              title: const Text('Criar Campeonato'),
+                              backgroundColor: Color(0xFF2D2EFF),
+                            ),
+                            body: Container(
+                              width: double.infinity,
+                              height: double.infinity,
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFF2D2EFF),
+                                    Color(0xFF7B2FF2),
+                                    Color(0xFFE94057),
+                                  ],
+                                ),
+                              ),
+                              child: CriarCampeonatoForm(),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.emoji_events, color: Color(0xFF2D2EFF)),
+                    title: const Text('Ranking de Campeonato', style: TextStyle(color: Color(0xFF2D2EFF))),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => Scaffold(
+                            appBar: AppBar(
+                              title: const Text('Ranking de Campeonato'),
+                              backgroundColor: Color(0xFF2D2EFF),
+                            ),
+                            body: Container(
+                              width: double.infinity,
+                              height: double.infinity,
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFF2D2EFF),
+                                    Color(0xFF7B2FF2),
+                                    Color(0xFFE94057),
+                                  ],
+                                ),
+                              ),
+                              child: RankingCampeonatoPage(),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
-              // Outros submenus do Quiz Campeonato podem ficar aqui
-              for (int i = 0; i < (championshipSubMenus?.length ?? 0); i++)
-                ListTile(
-                  leading: Icon(Icons.arrow_right, color: selectedChampionshipSubMenu == i ? Colors.deepPurple : null),
-                  title: Text(championshipSubMenus![i], style: TextStyle(fontWeight: selectedChampionshipSubMenu == i ? FontWeight.bold : FontWeight.normal)),
-                  selected: selectedChampionshipSubMenu == i,
-                  onTap: () {
-                    onChampionshipSubMenuSelect?.call(i);
-                    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-                  },
-                ),
             ],
           ),
         ],
@@ -1909,7 +1978,7 @@ class _RankingQuizFormState extends State<RankingQuizForm> {
                                 flex: 2,
                                 child: Text(
                                   user['username'] ?? '',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF2D2EFF)),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
