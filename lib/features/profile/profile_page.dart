@@ -277,9 +277,20 @@ class _ProfilePageState extends State<ProfilePage> {
           const BottomNavigationBarItem(icon: Icon(Icons.add_box_outlined), label: 'Novo'),
           const BottomNavigationBarItem(icon: Icon(Icons.ondemand_video), label: 'Reels'),
           BottomNavigationBarItem(
-            icon: currentUserAvatarUrl != null && currentUserAvatarUrl!.isNotEmpty
-                ? CircleAvatar(radius: 12, backgroundImage: NetworkImage(currentUserAvatarUrl!))
-                : const CircleAvatar(radius: 12, child: Icon(Icons.person, size: 16)),
+            icon: GestureDetector(
+              onTap: () {
+                // Se já está no seu perfil, não faz nada
+                if (profile != null && profile!['id'] == currentUserId) return;
+                // Volta para o seu próprio perfil
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const ProfilePage()),
+                  (route) => false,
+                );
+              },
+              child: currentUserAvatarUrl != null && currentUserAvatarUrl!.isNotEmpty
+                  ? CircleAvatar(radius: 12, backgroundImage: NetworkImage(currentUserAvatarUrl!))
+                  : const CircleAvatar(radius: 12, child: Icon(Icons.person, size: 16)),
+            ),
             label: 'Perfil',
           ),
         ],
@@ -327,10 +338,22 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildProfileActions() {
     final isOtherUser = profile != null && profile!['id'] != null && profile!['id'] != currentUserId;
+    final isOwnProfile = profile != null && profile!['id'] == currentUserId;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
+          if (isOwnProfile) ...[
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () {
+                  Navigator.of(context).pushNamed('/vocational_test');
+                },
+                child: const Text('Vocacional'),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: OutlinedButton(
               onPressed: () {
