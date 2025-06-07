@@ -257,25 +257,30 @@ class _GerenciarEquipesPageState extends State<GerenciarEquipesPage> {
                                 onChanged: (v) => novoLogo = v,
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.photo),
-                              tooltip: 'Selecionar da galeria',
-                              onPressed: () async {
-                                await _pickImageFromGallery((url) {
-                                  _logoUrlController.text = url;
-                                  novoLogo = url;
-                                });
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.camera_alt),
-                              tooltip: 'Tirar foto',
-                              onPressed: () async {
-                                await _pickImageFromCamera((url) {
-                                  _logoUrlController.text = url;
-                                  novoLogo = url;
-                                });
-                              },
+                            const SizedBox(width: 8),
+                            Column(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.photo_library, color: Color(0xFF2D2EFF)),
+                                  tooltip: 'Selecionar da galeria',
+                                  onPressed: () async {
+                                    await _pickImageFromGallery((url) {
+                                      _logoUrlController.text = url;
+                                      novoLogo = url;
+                                    });
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.camera_alt, color: Color(0xFF2D2EFF)),
+                                  tooltip: 'Tirar foto',
+                                  onPressed: () async {
+                                    await _pickImageFromCamera((url) {
+                                      _logoUrlController.text = url;
+                                      novoLogo = url;
+                                    });
+                                  },
+                                ),
+                              ],
                             ),
                           ],
                         ),

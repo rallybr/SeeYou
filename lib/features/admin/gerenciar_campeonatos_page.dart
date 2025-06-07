@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'confrontos_campeonato_page.dart';
 import 'ranking_campeonato_page.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 class GerenciarCampeonatosPage extends StatefulWidget {
   const GerenciarCampeonatosPage({Key? key}) : super(key: key);
@@ -36,6 +38,9 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
 
   Map<String, String> _teamNames = {};
   Map<String, String> _groupNames = {};
+
+  final ImagePicker _picker = ImagePicker();
+  TextEditingController _logoEquipeController = TextEditingController();
 
   @override
   void initState() {
@@ -75,7 +80,7 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
     await Supabase.instance.client.from('quiz_teams').insert({
       'name': _nomeEquipe,
       'location': _localidadeEquipe,
-      'logo_url': _logoEquipe,
+      'logo_url': _logoEquipeController.text.isNotEmpty ? _logoEquipeController.text : _logoEquipe,
       'championship_id': _campeonatoSelecionado!['id'],
     });
     setState(() {
@@ -83,6 +88,7 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
       _nomeEquipe = null;
       _localidadeEquipe = null;
       _logoEquipe = null;
+      _logoEquipeController.clear();
     });
     _formEquipeKey.currentState?.reset();
     _fetchEquipes();
@@ -90,6 +96,33 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Equipe cadastrada com sucesso!')),
       );
+    }
+  }
+
+  Future<String?> _uploadImageToSupabase(File imageFile) async {
+    final fileName = 'logo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final storage = Supabase.instance.client.storage.from('logos');
+    final res = await storage.upload(fileName, imageFile);
+    if (res != null && res.isNotEmpty) {
+      final url = storage.getPublicUrl(fileName);
+      return url;
+    }
+    return null;
+  }
+
+  Future<void> _pickImageFromGallery(Function(String) onUrl) async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    if (image != null) {
+      final url = await _uploadImageToSupabase(File(image.path));
+      if (url != null) onUrl(url);
+    }
+  }
+
+  Future<void> _pickImageFromCamera(Function(String) onUrl) async {
+    final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+    if (image != null) {
+      final url = await _uploadImageToSupabase(File(image.path));
+      if (url != null) onUrl(url);
     }
   }
 
@@ -489,6 +522,172 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
     }
   }
 
+  Future<void> _gerarFaseEliminatoria() async {
+    if (_campeonatoSelecionado == null) return;
+    setState(() => _gerandoConfrontos = true);
+
+    try {
+      // Buscar classificados de cada grupo (2 primeiros)
+      final grupos = await Supabase.instance.client
+          .from('quiz_groups')
+          .select('id, name')
+          .eq('championship_id', _campeonatoSelecionado!['id']);
+      
+      List<String> classificados = [];
+      for (final grupo in grupos) {
+        // Buscar equipes do grupo
+        final equipes = await Supabase.instance.client
+            .from('quiz_group_teams')
+            .select('team_id')
+            .eq('group_id', grupo['id']);
+        
+        // Buscar resultados das equipes
+        final resultados = await Supabase.instance.client
+            .from('quiz_match_results')
+            .select('match_id, team1_score, team2_score, winner_team_id')
+            .inFilter('match_id', _confrontos.where((c) => c['group_id'] == grupo['id']).map((c) => c['id']).toList());
+        
+        // Calcular pontuação de cada equipe
+        Map<String, int> pontos = {};
+        for (final equipe in equipes) {
+          final teamId = equipe['team_id'];
+          pontos[teamId] = 0;
+          for (final resultado in resultados) {
+            if (resultado['winner_team_id'] == teamId) {
+              pontos[teamId] = (pontos[teamId] ?? 0) + 3;
+            } else if (resultado['team1_score'] == resultado['team2_score']) {
+              pontos[teamId] = (pontos[teamId] ?? 0) + 1;
+            }
+          }
+        }
+        
+        // Ordenar equipes por pontos e pegar as 2 primeiras
+        final equipesOrdenadas = pontos.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        
+        classificados.addAll(equipesOrdenadas.take(2).map((e) => e.key));
+      }
+
+      // Gerar confrontos da fase eliminatória
+      final numEquipes = classificados.length;
+      final numRodadas = (numEquipes / 2).ceil();
+      
+      for (int i = 0; i < numEquipes; i += 2) {
+        if (i + 1 < numEquipes) {
+          await Supabase.instance.client
+              .from('quiz_matches')
+              .insert({
+                'championship_id': _campeonatoSelecionado!['id'],
+                'team1_id': classificados[i],
+                'team2_id': classificados[i + 1],
+                'phase': 'eliminatoria',
+                'round': 1,
+                'status': 'pendente',
+              });
+        }
+      }
+
+      await _buscarConfrontos();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Fase eliminatória gerada com sucesso!')),
+        );
+      }
+    } catch (e) {
+      print('Erro ao gerar fase eliminatória: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao gerar fase eliminatória: $e')),
+        );
+      }
+    } finally {
+      setState(() => _gerandoConfrontos = false);
+    }
+  }
+
+  Future<void> _gerarProximaRodadaEliminatoria() async {
+    if (_campeonatoSelecionado == null) return;
+    setState(() => _gerandoConfrontos = true);
+
+    try {
+      // Buscar confrontos da última rodada
+      final confrontosAtuais = await Supabase.instance.client
+          .from('quiz_matches')
+          .select('id, team1_id, team2_id, round')
+          .eq('championship_id', _campeonatoSelecionado!['id'])
+          .eq('phase', 'eliminatoria')
+          .order('round', ascending: false);
+
+      if (confrontosAtuais.isEmpty) {
+        throw Exception('Nenhum confronto encontrado na fase eliminatória');
+      }
+
+      final ultimaRodada = confrontosAtuais.first['round'] as int;
+      final confrontosUltimaRodada = confrontosAtuais.where((c) => c['round'] == ultimaRodada).toList();
+
+      // Verificar se todos os confrontos da última rodada foram finalizados
+      for (final confronto in confrontosUltimaRodada) {
+        final resultado = await Supabase.instance.client
+            .from('quiz_match_results')
+            .select('winner_team_id')
+            .eq('match_id', confronto['id'])
+            .maybeSingle();
+        
+        if (resultado == null || resultado['winner_team_id'] == null) {
+          throw Exception('Existem confrontos pendentes na última rodada');
+        }
+      }
+
+      // Coletar vencedores da última rodada
+      List<String> vencedores = [];
+      for (final confronto in confrontosUltimaRodada) {
+        final resultado = await Supabase.instance.client
+            .from('quiz_match_results')
+            .select('winner_team_id')
+            .eq('match_id', confronto['id'])
+            .single();
+        vencedores.add(resultado['winner_team_id']);
+      }
+
+      // Gerar confrontos da próxima rodada
+      final numEquipes = vencedores.length;
+      if (numEquipes < 2) {
+        throw Exception('Não há equipes suficientes para a próxima rodada');
+      }
+
+      for (int i = 0; i < numEquipes; i += 2) {
+        if (i + 1 < numEquipes) {
+          await Supabase.instance.client
+              .from('quiz_matches')
+              .insert({
+                'championship_id': _campeonatoSelecionado!['id'],
+                'team1_id': vencedores[i],
+                'team2_id': vencedores[i + 1],
+                'phase': 'eliminatoria',
+                'round': ultimaRodada + 1,
+                'status': 'pendente',
+              });
+        }
+      }
+
+      await _buscarConfrontos();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Próxima rodada gerada com sucesso!')),
+        );
+      }
+    } catch (e) {
+      print('Erro ao gerar próxima rodada: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao gerar próxima rodada: $e')),
+        );
+      }
+    } finally {
+      setState(() => _gerandoConfrontos = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     print('DEBUG: Quantidade de grupos no build: ${_grupos.length}');
@@ -549,28 +748,6 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
             padding: const EdgeInsets.all(16),
             children: [
               const SizedBox(height: 24),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.leaderboard, color: Color(0xFF2D2EFF)),
-                label: const Text('Ver Ranking dos Grupos', style: TextStyle(color: Color(0xFF2D2EFF), fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  elevation: 6,
-                  shadowColor: Color(0xFF2D2EFF).withOpacity(0.18),
-                  side: const BorderSide(color: Color(0xFF7B2FF2), width: 1.5),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => RankingCampeonatoPage(
-                        championshipId: _campeonatoSelecionado!['id'],
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 24),
               // Formulário de cadastro de equipe
               Card(
                 elevation: 6,
@@ -609,6 +786,7 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
+                          controller: _logoEquipeController,
                           decoration: InputDecoration(
                             labelText: 'URL do Logo (opcional)',
                             prefixIcon: const Icon(Icons.image, color: Color(0xFFE94057)),
@@ -617,6 +795,30 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
                             fillColor: Colors.white,
                           ),
                           onSaved: (v) => _logoEquipe = v,
+                        ),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.photo_library, color: Color(0xFF2D2EFF)),
+                              tooltip: 'Selecionar da galeria',
+                              onPressed: () async {
+                                await _pickImageFromGallery((url) {
+                                  _logoEquipeController.text = url;
+                                  _logoEquipe = url;
+                                });
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.camera_alt, color: Color(0xFF2D2EFF)),
+                              tooltip: 'Tirar foto',
+                              onPressed: () async {
+                                await _pickImageFromCamera((url) {
+                                  _logoEquipeController.text = url;
+                                  _logoEquipe = url;
+                                });
+                              },
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton.icon(
@@ -771,6 +973,20 @@ class _GerenciarCampeonatosPageState extends State<GerenciarCampeonatosPage> {
                   icon: const Icon(Icons.sports_kabaddi),
                   label: const Text('Gerar Confrontos'),
                   onPressed: !_gerandoConfrontos && _confrontos.isEmpty ? _gerarConfrontos : null,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.emoji_events),
+                  label: const Text('Gerar Fase Eliminatória'),
+                  onPressed: _confrontos.isNotEmpty && _confrontos.every((c) => c['status'] == 'finalizado') ? _gerarFaseEliminatoria : null,
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.arrow_forward),
+                  label: const Text('Gerar Próxima Rodada'),
+                  onPressed: _confrontos.any((c) => c['phase'] == 'eliminatoria') && 
+                           _confrontos.where((c) => c['phase'] == 'eliminatoria').every((c) => c['status'] == 'finalizado') ? 
+                           _gerarProximaRodadaEliminatoria : null,
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton.icon(

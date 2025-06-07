@@ -93,8 +93,9 @@ class _FeedPageState extends State<FeedPage> {
     // Cancela a subscription anterior se já existir
     _notificationSubscription?.cancel();
     _notificationSubscription = Supabase.instance.client
-        .from('notifications:user_id=eq.${user.id}')
+        .from('notifications')
         .stream(primaryKey: ['id'])
+        .eq('user_id', user.id)
         .listen((event) {
           _checkNotifications();
         });

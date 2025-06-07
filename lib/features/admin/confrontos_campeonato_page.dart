@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'chaveamento_campeonato_page.dart';
 
 class ConfrontosCampeonatoPage extends StatefulWidget {
   final String? championshipId;
@@ -95,6 +96,23 @@ class _ConfrontosCampeonatoPageState extends State<ConfrontosCampeonatoPage> {
       appBar: AppBar(
         title: const Text('Confrontos do Campeonato'),
         backgroundColor: const Color(0xFF2D2EFF),
+        actions: [
+          if (_confrontos.any((c) => c['phase'] == 'eliminatoria'))
+            IconButton(
+              icon: const Icon(Icons.account_tree),
+              tooltip: 'Ver Chaveamento',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChaveamentoCampeonatoPage(
+                      championshipId: _selectedChampionshipId,
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
       ),
       body: Container(
         decoration: const BoxDecoration(
@@ -159,58 +177,105 @@ class _ConfrontosCampeonatoPageState extends State<ConfrontosCampeonatoPage> {
 
   List<Widget> _buildConfrontosPorGrupo() {
     final Map<String, List<Map<String, dynamic>>> confrontosPorGrupo = {};
+    final List<Map<String, dynamic>> confrontosEliminatorios = [];
+    
     for (final c in _confrontos) {
-      final groupId = c['group_id'] ?? '';
-      confrontosPorGrupo.putIfAbsent(groupId, () => []);
-      confrontosPorGrupo[groupId]!.add(c);
+      if (c['phase'] == 'eliminatoria') {
+        confrontosEliminatorios.add(c);
+      } else {
+        final groupId = c['group_id'] ?? '';
+        confrontosPorGrupo.putIfAbsent(groupId, () => []);
+        confrontosPorGrupo[groupId]!.add(c);
+      }
     }
-    // Ordenar os grupos alfabeticamente pelo nome
-    final sortedGroupIds = confrontosPorGrupo.keys.toList()
-      ..sort((a, b) {
-        final nameA = _groupNames[a]?.toLowerCase() ?? '';
-        final nameB = _groupNames[b]?.toLowerCase() ?? '';
-        return nameA.compareTo(nameB);
-      });
-    return [
-      for (final groupId in sortedGroupIds)
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 18),
-            Text(
-              'Confrontos ${_groupNames[groupId] ?? 'Grupo'}',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(color: Colors.black26, blurRadius: 2)]),
-            ),
-            const SizedBox(height: 10),
-            ...confrontosPorGrupo[groupId]!.map((c) {
-              final team1Name = _teamNames[c['team1_id']] ?? 'Equipe 1';
-              final team2Name = _teamNames[c['team2_id']] ?? 'Equipe 2';
-              return FutureBuilder<Map<String, dynamic>?>(
-                future: _buscarResultadoConfronto(c['id'].toString()),
-                builder: (context, snapshot) {
-                  final resultado = snapshot.data;
-                  return Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 6,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    color: Colors.white.withOpacity(0.92),
-                    child: ListTile(
-                      leading: const Icon(Icons.sports_kabaddi),
-                      title: Text('$team1Name x $team2Name'),
-                      subtitle: Text('Rodada ${c['round'] ?? 1}'),
-                      trailing: resultado != null
-                          ? Text(
-                              '${resultado['team1_score'] ?? 0} : ${resultado['team2_score'] ?? 0}',
-                              style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
-                            )
-                          : const Text('Pendente', style: TextStyle(color: Colors.orange)),
-                    ),
-                  );
-                },
-              );
-            }),
-          ],
+
+    List<Widget> widgets = [];
+
+    // Adicionar confrontos da fase de grupos
+    if (confrontosPorGrupo.isNotEmpty) {
+      widgets.add(const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'Fase de Grupos',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(color: Colors.black26, blurRadius: 2)]),
         ),
-    ];
+      ));
+
+      // Ordenar os grupos alfabeticamente pelo nome
+      final sortedGroupIds = confrontosPorGrupo.keys.toList()
+        ..sort((a, b) {
+          final nameA = _groupNames[a]?.toLowerCase() ?? '';
+          final nameB = _groupNames[b]?.toLowerCase() ?? '';
+          return nameA.compareTo(nameB);
+        });
+
+      for (final groupId in sortedGroupIds) {
+        widgets.add(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 18),
+              Text(
+                'Confrontos ${_groupNames[groupId] ?? 'Grupo'}',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(color: Colors.black26, blurRadius: 2)]),
+              ),
+              const SizedBox(height: 10),
+              ...confrontosPorGrupo[groupId]!.map((c) => _buildConfrontoCard(c)),
+            ],
+          ),
+        );
+      }
+    }
+
+    // Adicionar confrontos da fase eliminatória
+    if (confrontosEliminatorios.isNotEmpty) {
+      widgets.add(const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'Fase Eliminatória',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white, shadows: [Shadow(color: Colors.black26, blurRadius: 2)]),
+        ),
+      ));
+
+      // Ordenar por rodada
+      confrontosEliminatorios.sort((a, b) => (a['round'] ?? 0).compareTo(b['round'] ?? 0));
+
+      for (final c in confrontosEliminatorios) {
+        widgets.add(_buildConfrontoCard(c));
+      }
+    }
+
+    return widgets;
+  }
+
+  Widget _buildConfrontoCard(Map<String, dynamic> c) {
+    final team1Name = _teamNames[c['team1_id']] ?? 'Equipe 1';
+    final team2Name = _teamNames[c['team2_id']] ?? 'Equipe 2';
+    return FutureBuilder<Map<String, dynamic>?>(
+      future: _buscarResultadoConfronto(c['id'].toString()),
+      builder: (context, snapshot) {
+        final resultado = snapshot.data;
+        return Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 6,
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          color: Colors.white.withOpacity(0.92),
+          child: ListTile(
+            leading: Icon(
+              c['phase'] == 'eliminatoria' ? Icons.emoji_events : Icons.sports_kabaddi,
+              color: c['phase'] == 'eliminatoria' ? Colors.amber : null,
+            ),
+            title: Text('$team1Name x $team2Name'),
+            subtitle: Text(c['phase'] == 'eliminatoria' ? 'Rodada ${c['round']}' : 'Rodada ${c['round'] ?? 1}'),
+            trailing: resultado != null
+                ? Text(
+                    '${resultado['team1_score'] ?? 0} : ${resultado['team2_score'] ?? 0}',
+                    style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                  )
+                : const Text('Pendente', style: TextStyle(color: Colors.orange)),
+          ),
+        );
+      },
+    );
   }
 } 

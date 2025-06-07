@@ -7,6 +7,9 @@ import 'features/auth/pages/register_flow_page.dart';
 import 'features/feed/feed_page.dart';
 import 'features/admin/dashboard_page.dart';
 import 'features/bible_quiz/bible_quiz_page.dart';
+import 'features/admin/cadastrar_musica_page.dart';
+import 'features/admin/cadastrar_video_page.dart';
+import 'features/admin/cadastrar_mensagem_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,6 +64,9 @@ class MyApp extends StatelessWidget {
         '/feed': (context) => const FeedPage(),
         '/admin': (context) => const DashboardPage(),
         '/bible_quiz': (context) => const BibleQuizPage(),
+        '/admin/musicas': (context) => const CadastrarMusicaPage(),
+        '/admin/videos': (context) => const CadastrarVideoPage(),
+        '/admin/mensagens': (context) => const CadastrarMensagemPage(),
       },
     );
   }

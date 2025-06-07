@@ -297,6 +297,34 @@ class _DashboardDrawer extends StatelessWidget {
                   if (Navigator.of(context).canPop()) Navigator.of(context).pop();
                 },
               ),
+          // Menu Midias
+          ExpansionTile(
+            leading: const Icon(Icons.perm_media, color: Color(0xFFB71C1C)),
+            title: const Text('Midias', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFB71C1C))),
+            children: [
+              ListTile(
+                leading: const Icon(Icons.library_music, color: Color(0xFF2D2EFF)),
+                title: const Text('Musicas', style: TextStyle(color: Color(0xFF2D2EFF))),
+                onTap: () {
+                  Navigator.of(context).pushNamed('/admin/musicas');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.video_collection_outlined, color: Color(0xFF2D2EFF)),
+                title: const Text('Videos', style: TextStyle(color: Color(0xFF2D2EFF))),
+                onTap: () {
+                  Navigator.of(context).pushNamed('/admin/videos');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.chat_bubble_outline, color: Color(0xFF2D2EFF)),
+                title: const Text('Mensagens', style: TextStyle(color: Color(0xFF2D2EFF))),
+                onTap: () {
+                  Navigator.of(context).pushNamed('/admin/mensagens');
+                },
+              ),
+            ],
+          ),
           // Bible Quiz menu com submenus
           ExpansionTile(
             leading: Icon(icons[6], color: Color(0xFFB71C1C)),

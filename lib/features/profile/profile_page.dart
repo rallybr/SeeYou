@@ -10,6 +10,12 @@ import 'package:path/path.dart' as path;
 import 'package:seeyou/features/auth/widgets/profile_picture_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../duel/historico_duelos_page.dart';
+import '../duel/desafiar_usuario_page.dart';
+import '../duel/notificacao_desafio_page.dart';
+import '../duel/executar_duelo_page.dart';
+import '../duel/duelo_quiz_page.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class ProfilePage extends StatefulWidget {
   final String? profileId; // Se nulo, mostra o perfil do logado
@@ -20,6 +26,7 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  final _supabase = Supabase.instance.client;
   Map<String, dynamic>? profile;
   bool loading = true;
   int _selectedIndex = 4;
@@ -28,6 +35,8 @@ class _ProfilePageState extends State<ProfilePage> {
   int postCount = 0;
   int followersCount = 0;
   int followingCount = 0;
+  Map<String, dynamic>? _desafioPendente;
+  String? _error;
 
   @override
   void initState() {
@@ -35,6 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _fetchProfile();
     _fetchCurrentUserAvatar();
     _fetchStats();
+    _verificarDesafioPendente();
   }
 
   Future<void> _fetchProfile() async {
@@ -42,16 +52,23 @@ class _ProfilePageState extends State<ProfilePage> {
     if (user == null) return;
     currentUserId = user.id;
     final idToFetch = widget.profileId ?? user.id;
-    final data = await Supabase.instance.client
-        .from('profiles')
-        .select()
-        .eq('id', idToFetch)
-        .maybeSingle();
-    setState(() {
-      profile = data;
-      loading = false;
-    });
-    await _fetchStats();
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', idToFetch)
+          .maybeSingle();
+      setState(() {
+        profile = data;
+        loading = false;
+      });
+      await _fetchStats();
+    } catch (e) {
+      setState(() {
+        _error = 'Erro ao buscar perfil: $e';
+        loading = false;
+      });
+    }
   }
 
   Future<void> _fetchCurrentUserAvatar() async {
@@ -93,6 +110,37 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
+  Future<void> _verificarDesafioPendente() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final response = await _supabase
+          .from('quiz_duels')
+          .select()
+          .eq('opponent_id', userId)
+          .eq('status', 'pendente');
+      Map<String, dynamic>? desafio;
+      if (response != null && response is List && response.isNotEmpty) {
+        desafio = response[0];
+        // Buscar dados do desafiante
+        final challenger = await _supabase
+            .from('profiles')
+            .select('id, username, avatar_url')
+            .eq('id', desafio['challenger_id'])
+            .maybeSingle();
+        desafio['challenger'] = challenger;
+      }
+      if (mounted) {
+        setState(() {
+          _desafioPendente = desafio;
+        });
+      }
+    } catch (e) {
+      print('Erro ao verificar desafio pendente: $e');
+    }
+  }
+
   void _onItemTapped(int index) {
     if (index == 0) {
       Navigator.of(context).pushAndRemoveUntil(
@@ -132,29 +180,86 @@ class _ProfilePageState extends State<ProfilePage> {
         child: SafeArea(
           child: loading
               ? const Center(child: CircularProgressIndicator())
-              : SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      _ProfileHeader(profile: profile!),
-                      if (profile != null && profile!['id'] != currentUserId)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: FollowButton(profileId: profile!['id']),
+              : _error != null
+                  ? Center(child: Text(_error!))
+                  : profile == null
+                      ? const Center(child: Text('Perfil não encontrado'))
+                      : SingleChildScrollView(
+                          child: Column(
+                            children: [
+                              _ProfileHeader(profile: profile!),
+                              if (profile != null && profile!['id'] != currentUserId)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  child: FollowButton(profileId: profile!['id']),
+                                ),
+                              _ProfileStats(
+                                postCount: postCount,
+                                followersCount: followersCount,
+                                followingCount: followingCount,
+                              ),
+                              _ProfileBio(profile: profile!),
+                              if (_desafioPendente != null)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  child: Card(
+                                    color: Colors.yellow[50],
+                                    child: ListTile(
+                                      leading: const Icon(Icons.sports_esports, color: Colors.orange),
+                                      title: Text('Desafio de Quiz recebido de @${_desafioPendente!['challenger']['username']}'),
+                                      subtitle: const Text('Você deseja aceitar ou rejeitar o desafio?'),
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          TextButton(
+                                            onPressed: () async {
+                                              await _supabase.from('quiz_duels').update({
+                                                'status': 'em_andamento',
+                                              }).eq('id', _desafioPendente!['id']);
+                                              final duelId = _desafioPendente?['id'];
+                                              final quizId = _desafioPendente?['quiz_id'];
+                                              setState(() {
+                                                _desafioPendente = null;
+                                              });
+                                              if (quizId != null && context.mounted) {
+                                                Navigator.of(context).push(
+                                                  MaterialPageRoute(
+                                                    builder: (_) => ExecutarDueloPage(
+                                                      duelId: _desafioPendente!['id'],
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                            child: const Text('Aceitar'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () async {
+                                              await _supabase.from('quiz_duels').update({
+                                                'status': 'rejeitado',
+                                              }).eq('id', _desafioPendente!['id']);
+                                              setState(() {
+                                                _desafioPendente = null;
+                                              });
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('Desafio rejeitado.')),
+                                              );
+                                            },
+                                            child: const Text('Rejeitar'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              _buildProfileActions(),
+                              _ProfileHighlights(),
+                              const Divider(height: 1),
+                              _ProfileTabs(),
+                              _DuelCarousel(profileId: profile!['id']),
+                            ],
+                          ),
                         ),
-                      _ProfileStats(
-                        postCount: postCount,
-                        followersCount: followersCount,
-                        followingCount: followingCount,
-                      ),
-                      _ProfileBio(profile: profile!),
-                      _ProfileActions(),
-                      _ProfileHighlights(),
-                      const Divider(height: 1),
-                      _ProfileTabs(),
-                      _ProfileGridPosts(),
-                    ],
-                  ),
-                ),
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -179,6 +284,165 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
       ),
+      appBar: AppBar(
+        title: const Text('Perfil'),
+        backgroundColor: const Color(0xFF2D2EFF),
+        actions: [
+          if (_desafioPendente != null)
+            IconButton(
+              icon: const Icon(Icons.sports_esports),
+              tooltip: 'Desafio Pendente',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => NotificacaoDesafioPage(
+                      desafio: _desafioPendente!,
+                      desafiante: _desafioPendente!['challenger'],
+                    ),
+                  ),
+                ).then((aceito) {
+                  if (aceito == true) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ExecutarDueloPage(
+                          duelId: _desafioPendente!['id'],
+                        ),
+                      ),
+                    );
+                  }
+                  _verificarDesafioPendente();
+                });
+              },
+            ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.of(context).pushNamed('/settings');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileActions() {
+    final isOtherUser = profile != null && profile!['id'] != null && profile!['id'] != currentUserId;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () {
+                Navigator.of(context).pushNamed('/bible_quiz');
+              },
+              child: const Text('Quiz'),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const HistoricoDuelosPage(),
+                  ),
+                );
+              },
+              child: const Text('Duelos'),
+            ),
+          ),
+          if (isOtherUser) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () async {
+                  final userId = Supabase.instance.client.auth.currentUser?.id;
+                  final targetId = profile?['id'];
+                  if (userId == null || targetId == null) return;
+                  // Buscar o quiz padrão aprovado
+                  final quiz = await Supabase.instance.client
+                      .from('quizzes')
+                      .select('id')
+                      .eq('aprovado', true)
+                      .order('created_at', ascending: false)
+                      .limit(1)
+                      .maybeSingle();
+                  final quizId = quiz?['id'];
+                  if (quizId == null) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Nenhum quiz padrão disponível!')),
+                      );
+                    }
+                    return;
+                  }
+                  // Cria o desafio
+                  final response = await Supabase.instance.client.from('quiz_duels').insert({
+                    'challenger_id': userId,
+                    'opponent_id': targetId,
+                    'quiz_id': quizId,
+                    'status': 'pendente',
+                    'created_at': DateTime.now().toIso8601String(),
+                  }).select().single();
+                  // Cria notificação para o usuário desafiado
+                  await Supabase.instance.client.from('notifications').insert({
+                    'user_id': targetId,
+                    'type': 'quiz_duel',
+                    'created_at': DateTime.now().toIso8601String(),
+                    'read': false,
+                  });
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Desafio enviado! Aguarde resposta.')),
+                    );
+                  }
+                },
+                child: const Text('Desafiar'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (profile?['bio'] != null && profile!['bio'].toString().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              profile!['bio'],
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ),
+        if (_desafioPendente != null)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Card(
+              child: ListTile(
+                leading: const Icon(Icons.notifications_active),
+                title: const Text('Desafio Pendente'),
+                subtitle: Text('Você tem um desafio pendente de ${_desafioPendente!['challenger_username']}'),
+                trailing: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ExecutarDueloPage(
+                          duelId: _desafioPendente!['id'],
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Responder'),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -293,7 +557,18 @@ class _ProfileMenuButton extends StatelessWidget {
                 Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
               }
             } else if (value == 'edit') {
-              // Navegação para tela de edição de perfil (implementar depois)
+              // Abrir modal de edição de perfil
+              final profileState = context.findAncestorStateOfType<_ProfilePageState>();
+              if (profileState != null && profileState.profile != null) {
+                showDialog(
+                  context: context,
+                  builder: (_) => EditProfileDialog(profile: profileState.profile!),
+                ).then((result) {
+                  if (result == true) {
+                    profileState._fetchProfile();
+                  }
+                });
+              }
             }
           },
         );
@@ -365,96 +640,6 @@ class _ProfileBio extends StatelessWidget {
               padding: const EdgeInsets.only(top: 2),
               child: Text(profile['website'], style: const TextStyle(color: Colors.blue)),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProfileActions extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final profileState = context.findAncestorStateOfType<_ProfilePageState>();
-    final profile = profileState?.profile;
-    final profileId = profile?['id'] ?? '';
-    final username = profile?['username'] ?? '';
-    final profileUrl = 'https://seeyou.com/perfil/$profileId';
-    final email = profile?['email'] ?? '';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () {
-                Navigator.of(context).pushNamed('/bible_quiz');
-              },
-              child: const Text('Quiz'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton(
-              onPressed: profile == null
-                  ? null
-                  : () async {
-                      final result = await showDialog(
-                        context: context,
-                        builder: (_) => EditProfileDialog(profile: profile),
-                      );
-                      if (result == true) {
-                        await profileState?._fetchProfile();
-                      }
-                    },
-              child: const Text('Editar'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton(
-              onPressed: profile == null
-                  ? null
-                  : () async {
-                      final selected = await showMenu<String>(
-                        context: context,
-                        position: RelativeRect.fromLTRB(1000, 200, 0, 0),
-                        items: [
-                          const PopupMenuItem<String>(
-                            value: 'copy',
-                            child: Text('Copiar link do perfil'),
-                          ),
-                          const PopupMenuItem<String>(
-                            value: 'share',
-                            child: Text('Compartilhar'),
-                          ),
-                        ],
-                      );
-                      if (selected == 'copy') {
-                        await Clipboard.setData(ClipboardData(text: profileUrl));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Link do perfil copiado!')),
-                        );
-                      } else if (selected == 'share') {
-                        await Share.share('Veja o perfil @$username: $profileUrl');
-                      }
-                    },
-              child: const Text('Compartilhar'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton(
-              onPressed: (profile == null || email.isEmpty)
-                  ? null
-                  : () async {
-                      await showDialog(
-                        context: context,
-                        builder: (_) => EmailDialog(email: email, username: username),
-                      );
-                    },
-              child: const Text('Email'),
-            ),
-          ),
         ],
       ),
     );
@@ -554,393 +739,923 @@ class _ProfileHighlightsState extends State<_ProfileHighlights> {
 class _ProfileTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: const [
-        Icon(Icons.grid_on, size: 28),
-        Icon(Icons.video_collection_outlined, size: 28),
-        Icon(Icons.person_pin_outlined, size: 28),
-      ],
-    );
-  }
-}
-
-class _ProfileGridPosts extends StatefulWidget {
-  @override
-  State<_ProfileGridPosts> createState() => _ProfileGridPostsState();
-}
-
-class _ProfileGridPostsState extends State<_ProfileGridPosts> {
-  late Future<List<Map<String, dynamic>>> _userPostsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _userPostsFuture = _fetchUserPosts();
-  }
-
-  Future<List<Map<String, dynamic>>> _fetchUserPosts() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return [];
-    // Busca o id do perfil visitado (ou do logado se for o próprio perfil)
-    final profileId = (context.findAncestorStateOfType<_ProfilePageState>()?.profile?['id']) ?? user.id;
-    final data = await Supabase.instance.client
-        .from('posts')
-        .select('id, media_urls, content_text, created_at, user_id, profiles:user_id(id, username, avatar_url), views')
-        .eq('user_id', profileId)
-        .order('created_at', ascending: false);
-    return List<Map<String, dynamic>>.from(data);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _userPostsFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text('Nenhuma postagem ainda.'));
-        }
-        final posts = snapshot.data!;
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(2),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: 2,
-            crossAxisSpacing: 2,
-          ),
-          itemCount: posts.length,
-          itemBuilder: (context, i) {
-            final post = posts[i];
-            dynamic urls = post['media_urls'];
-            List<String> images = [];
-            if (urls is List) {
-              if (urls.isNotEmpty && urls[0] is List) {
-                images.addAll(List<String>.from(urls[0]));
-              } else {
-                images.addAll(List<String>.from(urls));
-              }
-            }
-            if (images.isEmpty) {
-              return const SizedBox.shrink(); // Não mostra posts sem imagem
-            }
-            return GestureDetector(
-              onTap: () async {
-                // Incrementa o número de visualizações de forma atômica no banco
-                await Supabase.instance.client
-                  .rpc('increment_post_views', params: {'post_id': post['id']});
-                await showDialog(
-                  context: context,
-                  builder: (_) => Dialog(
-                    insetPadding: const EdgeInsets.all(16),
-                    child: _PostDetailView(post: post, imageUrl: images[0]),
-                  ),
-                );
-                setState(() {}); // Recarrega o grid para mostrar o novo valor
-              },
-              child: Stack(
-                children: [
-                  Image.network(images[0], fit: BoxFit.cover, width: double.infinity, height: double.infinity),
-                  if (images.length > 1)
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.all(2),
-                        child: const Icon(Icons.collections, color: Colors.white, size: 20),
-                      ),
-                    ),
-                  Positioned(
-                    left: 6,
-                    bottom: 6,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.remove_red_eye, color: Colors.white, size: 18),
-                          const SizedBox(width: 4),
-                          Text(
-                            (post['views'] ?? 0).toString(),
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          GestureDetector(
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const MessageListModal(),
+              );
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.black54, width: 1.5),
+                borderRadius: BorderRadius.circular(8),
               ),
-            );
-          },
-        );
-      },
+              padding: const EdgeInsets.all(3),
+              child: const Icon(Icons.chat_bubble_outline, size: 22),
+            ),
+          ),
+          GestureDetector(
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const VideoListModal(),
+              );
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.black54, width: 1.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.all(3),
+              child: const Icon(Icons.video_collection_outlined, size: 22),
+            ),
+          ),
+          GestureDetector(
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const MusicListModal(),
+              );
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.black54, width: 1.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.all(3),
+              child: const Icon(Icons.library_music, size: 22),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _PostDetailView extends StatefulWidget {
-  final Map<String, dynamic> post;
-  final String? imageUrl;
-  const _PostDetailView({required this.post, this.imageUrl});
+class VideoListModal extends StatefulWidget {
+  const VideoListModal({Key? key}) : super(key: key);
 
   @override
-  State<_PostDetailView> createState() => _PostDetailViewState();
+  State<VideoListModal> createState() => _VideoListModalState();
 }
 
-class _PostDetailViewState extends State<_PostDetailView> {
-  bool _liked = false;
-  bool _loadingLike = false;
+class _VideoListModalState extends State<VideoListModal> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _videos = [];
+  List<Map<String, dynamic>> _filtered = [];
+  bool _loading = true;
+  String? _tocandoLink;
+  YoutubePlayerController? _playerController;
 
   @override
   void initState() {
     super.initState();
-    _checkLiked();
+    _fetchVideos();
+    _searchController.addListener(_onSearch);
   }
 
-  Future<void> _checkLiked() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
-    final data = await Supabase.instance.client
-        .from('likes')
-        .select()
-        .eq('user_id', user.id)
-        .eq('post_id', widget.post['id'])
-        .maybeSingle();
+  void _tocarVideo(String link) {
+    if (_tocandoLink == link) return;
+    final videoId = YoutubePlayer.convertUrlToId(link) ?? '';
     setState(() {
-      _liked = data != null;
+      _tocandoLink = link;
+      _playerController?.dispose();
+      _playerController = YoutubePlayerController(
+        initialVideoId: videoId,
+        flags: const YoutubePlayerFlags(autoPlay: true, mute: false),
+      );
     });
   }
 
-  Future<void> _toggleLike() async {
-    setState(() => _loadingLike = true);
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return;
-    if (_liked) {
-      await Supabase.instance.client
-          .from('likes')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('post_id', widget.post['id']);
-    } else {
-      await Supabase.instance.client.from('likes').insert({
-        'user_id': user.id,
-        'post_id': widget.post['id'],
-      });
-    }
-    await _checkLiked();
-    setState(() => _loadingLike = false);
+  @override
+  void dispose() {
+    _playerController?.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
-  void _showCommentsModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        final TextEditingController _commentController = TextEditingController();
-        // Adiciona um Future de estado para atualizar os comentários
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            Future<List<Map<String, dynamic>>> _fetchComments() async {
-              final data = await Supabase.instance.client
-                  .from('comments')
-                  .select('*, profiles!user_id(id, username, avatar_url)')
-                  .eq('post_id', widget.post['id'])
-                  .order('created_at', ascending: true);
-              return List<Map<String, dynamic>>.from(data);
-            }
-            // Variável de estado para o future
-            late Future<List<Map<String, dynamic>>> commentsFuture = _fetchComments();
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-                left: 16,
-                right: 16,
-                top: 16,
-              ),
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height * 0.7,
-                child: Column(
-                  children: [
-                    const Text('Comentários', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: FutureBuilder<List<Map<String, dynamic>>>(
-                        future: commentsFuture,
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.waiting) {
-                            return const Center(child: CircularProgressIndicator());
-                          }
-                          final comments = snapshot.data ?? [];
-                          if (comments.isEmpty) {
-                            return const Center(child: Text('Nenhum comentário ainda.'));
-                          }
-                          return ListView.builder(
-                            itemCount: comments.length,
-                            itemBuilder: (context, i) {
-                              final c = comments[i];
-                              final user = c['profiles'] ?? {};
-                              return ListTile(
-                                leading: (user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty)
-                                    ? CircleAvatar(backgroundImage: NetworkImage(user['avatar_url']))
-                                    : const CircleAvatar(child: Icon(Icons.person, size: 20)),
-                                title: Text(user['username'] ?? 'Usuário', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text(c['content'] ?? ''),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _commentController,
-                            decoration: const InputDecoration(hintText: 'Adicione um comentário...'),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.send),
-                          onPressed: () async {
-                            final text = _commentController.text.trim();
-                            if (text.isNotEmpty) {
-                              final user = Supabase.instance.client.auth.currentUser;
-                              if (user == null) return;
-                              await Supabase.instance.client.from('comments').insert({
-                                'user_id': user.id,
-                                'post_id': widget.post['id'],
-                                'content': text,
-                              });
-                              _commentController.clear();
-                              setModalState(() {
-                                commentsFuture = _fetchComments();
-                              });
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
+  Future<void> _fetchVideos() async {
+    setState(() => _loading = true);
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    final data = await Supabase.instance.client
+        .from('videos')
+        .select()
+        .eq('user_id', user.id)
+        .order('created_at', ascending: false);
+    setState(() {
+      _videos = List<Map<String, dynamic>>.from(data);
+      _filtered = _videos;
+      _loading = false;
+    });
+  }
+
+  void _onSearch() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _filtered = _videos.where((v) => v['titulo'].toString().toLowerCase().contains(query)).toList();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = widget.post['profiles'] ?? {};
-    dynamic urls = widget.post['media_urls'];
-    List<String> images = [];
-    if (urls is List) {
-      if (urls.isNotEmpty && urls[0] is List) {
-        images.addAll(List<String>.from(urls[0]));
-      } else {
-        images.addAll(List<String>.from(urls));
-      }
-    }
-    return Center(
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.95),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
+    final radius = BorderRadius.vertical(top: Radius.circular(32));
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF7B2FF2), Color(0xFFF357A8), Color(0xFFF2A93B)],
             ),
-          ],
-        ),
-        constraints: BoxConstraints(
-          maxWidth: 400,
-          maxHeight: MediaQuery.of(context).size.height * 0.85,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
+            boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 16, offset: Offset(0, -4))],
+          ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (images.isNotEmpty)
-                PostImageCarousel(images: images),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Row(
-                  children: [
-                    (user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty)
-                        ? CircleAvatar(backgroundImage: NetworkImage(user['avatar_url']))
-                        : const CircleAvatar(child: Icon(Icons.person, size: 20)),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user['username'] ?? 'Usuário',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          Text(
-                            widget.post['created_at'] != null
-                                ? widget.post['created_at'].toString().substring(0, 16).replaceFirst('T', ' ')
-                                : '',
-                            style: const TextStyle(fontSize: 12, color: Colors.black54),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        _liked ? Icons.favorite : Icons.favorite_border,
-                        color: _liked ? Colors.red : null,
-                        size: 28,
-                      ),
-                      onPressed: _loadingLike ? null : _toggleLike,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.mode_comment_outlined, size: 28),
-                      onPressed: () => _showCommentsModal(context),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.send_outlined, size: 28),
-                      onPressed: () {
-                        final content = widget.post['content_text'] ?? '';
-                        Share.share(content.isNotEmpty ? content : 'Veja este post!');
-                      },
-                    ),
-                  ],
+              Container(
+                width: 60,
+                height: 6,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white54,
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              if ((widget.post['content_text'] ?? '').toString().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  child: Text(
-                    widget.post['content_text'],
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                    textAlign: TextAlign.left,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar vídeo...',
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF7B2FF2)),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.95),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                   ),
                 ),
-              const SizedBox(height: 16),
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _filtered.isEmpty
+                        ? const Center(child: Text('Nenhum vídeo encontrado.', style: TextStyle(color: Colors.white, fontSize: 18)))
+                        : ListView.builder(
+                            controller: scrollController,
+                            itemCount: _filtered.length,
+                            itemBuilder: (context, i) {
+                              final v = _filtered[i];
+                              final isTocando = _tocandoLink == v['link'] && _playerController != null;
+                              return Column(
+                                children: [
+                                  Card(
+                                    color: Colors.white.withOpacity(0.93),
+                                    margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                    child: ListTile(
+                                      leading: const Icon(Icons.video_collection_outlined, color: Color(0xFF7B2FF2), size: 32),
+                                      title: Text(v['titulo'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      subtitle: Text('${v['autor'] ?? ''}  |  ${v['categoria'] ?? ''}'),
+                                      trailing: IconButton(
+                                        icon: Icon(
+                                          isTocando ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                                          color: const Color(0xFFF357A8),
+                                          size: 32,
+                                        ),
+                                        onPressed: () {
+                                          if (isTocando) {
+                                            _playerController?.pause();
+                                            setState(() => _tocandoLink = null);
+                                          } else {
+                                            _tocarVideo(v['link'] ?? '');
+                                          }
+                                        },
+                                      ),
+                                      onTap: () {
+                                        if (isTocando) {
+                                          _playerController?.pause();
+                                          setState(() => _tocandoLink = null);
+                                        } else {
+                                          _tocarVideo(v['link'] ?? '');
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  if (isTocando)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                                      child: YoutubePlayer(
+                                        controller: _playerController!,
+                                        showVideoProgressIndicator: true,
+                                        progressIndicatorColor: Colors.pinkAccent,
+                                        width: double.infinity,
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+              ),
             ],
           ),
+        );
+      },
+    );
+  }
+}
+
+class MessageListModal extends StatefulWidget {
+  const MessageListModal({Key? key}) : super(key: key);
+
+  @override
+  State<MessageListModal> createState() => _MessageListModalState();
+}
+
+class _MessageListModalState extends State<MessageListModal> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _mensagens = [];
+  List<Map<String, dynamic>> _filtered = [];
+  bool _loading = true;
+  String? _tocandoLink;
+  YoutubePlayerController? _playerController;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMensagens();
+    _searchController.addListener(_onSearch);
+  }
+
+  void _tocarMensagem(String link) {
+    if (_tocandoLink == link) return;
+    final isYoutube = YoutubePlayer.convertUrlToId(link) != null;
+    if (isYoutube) {
+      final videoId = YoutubePlayer.convertUrlToId(link) ?? '';
+      setState(() {
+        _tocandoLink = link;
+        _playerController?.dispose();
+        _playerController = YoutubePlayerController(
+          initialVideoId: videoId,
+          flags: const YoutubePlayerFlags(autoPlay: true, mute: false),
+        );
+      });
+    } else {
+      setState(() {
+        _tocandoLink = link;
+        _playerController?.dispose();
+        _playerController = null;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _playerController?.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchMensagens() async {
+    setState(() => _loading = true);
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    final data = await Supabase.instance.client
+        .from('mensagens')
+        .select()
+        .eq('user_id', user.id)
+        .order('created_at', ascending: false);
+    setState(() {
+      _mensagens = List<Map<String, dynamic>>.from(data);
+      _filtered = _mensagens;
+      _loading = false;
+    });
+  }
+
+  void _onSearch() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _filtered = _mensagens.where((m) => m['titulo'].toString().toLowerCase().contains(query)).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.vertical(top: Radius.circular(32));
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF7B2FF2), Color(0xFFF357A8), Color(0xFFF2A93B)],
+            ),
+            boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 16, offset: Offset(0, -4))],
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 60,
+                height: 6,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white54,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar mensagem...',
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF7B2FF2)),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.95),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _filtered.isEmpty
+                        ? const Center(child: Text('Nenhuma mensagem encontrada.', style: TextStyle(color: Colors.white, fontSize: 18)))
+                        : ListView.builder(
+                            controller: scrollController,
+                            itemCount: _filtered.length,
+                            itemBuilder: (context, i) {
+                              final m = _filtered[i];
+                              final isTocando = _tocandoLink == m['link'];
+                              final isYoutube = YoutubePlayer.convertUrlToId(m['link'] ?? '') != null;
+                              final isTexto = !isYoutube && (m['link'] ?? '').isNotEmpty && !(m['link'] ?? '').contains('http');
+                              return Column(
+                                children: [
+                                  Card(
+                                    color: Colors.white.withOpacity(0.93),
+                                    margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                    child: ListTile(
+                                      leading: const Icon(Icons.chat_bubble_outline, color: Color(0xFF7B2FF2), size: 32),
+                                      title: Text(m['titulo'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      subtitle: Text('${m['autor'] ?? ''}  |  ${m['categoria'] ?? ''}'),
+                                      trailing: IconButton(
+                                        icon: Icon(
+                                          isTocando ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                                          color: const Color(0xFFF357A8),
+                                          size: 32,
+                                        ),
+                                        onPressed: () {
+                                          if (isTocando) {
+                                            _playerController?.pause();
+                                            setState(() => _tocandoLink = null);
+                                          } else {
+                                            _tocarMensagem(m['link'] ?? '');
+                                          }
+                                        },
+                                      ),
+                                      onTap: () {
+                                        if (isTocando) {
+                                          _playerController?.pause();
+                                          setState(() => _tocandoLink = null);
+                                        } else {
+                                          _tocarMensagem(m['link'] ?? '');
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  if (isTocando && isYoutube && _playerController != null)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                                      child: YoutubePlayer(
+                                        controller: _playerController!,
+                                        showVideoProgressIndicator: true,
+                                        progressIndicatorColor: Colors.pinkAccent,
+                                        width: double.infinity,
+                                      ),
+                                    ),
+                                  if (isTocando && isTexto)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                                      child: Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(m['link'], style: const TextStyle(fontSize: 16)),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class MusicListModal extends StatefulWidget {
+  const MusicListModal({Key? key}) : super(key: key);
+
+  @override
+  State<MusicListModal> createState() => _MusicListModalState();
+}
+
+class _MusicListModalState extends State<MusicListModal> {
+  final TextEditingController _searchController = TextEditingController();
+  List<Map<String, dynamic>> _musicas = [];
+  List<Map<String, dynamic>> _filtered = [];
+  bool _loading = true;
+  String? _tocandoLink;
+  YoutubePlayerController? _playerController;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMusicas();
+    _searchController.addListener(_onSearch);
+  }
+
+  void _tocarMusica(String link) {
+    if (_tocandoLink == link) return; // já está tocando
+    final videoId = YoutubePlayer.convertUrlToId(link) ?? '';
+    setState(() {
+      _tocandoLink = link;
+      _playerController?.dispose();
+      _playerController = YoutubePlayerController(
+        initialVideoId: videoId,
+        flags: const YoutubePlayerFlags(autoPlay: true, mute: false),
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _playerController?.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchMusicas() async {
+    setState(() => _loading = true);
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    final data = await Supabase.instance.client
+        .from('musicas')
+        .select()
+        .eq('user_id', user.id)
+        .order('created_at', ascending: false);
+    setState(() {
+      _musicas = List<Map<String, dynamic>>.from(data);
+      _filtered = _musicas;
+      _loading = false;
+    });
+  }
+
+  void _onSearch() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      _filtered = _musicas.where((m) => m['titulo'].toString().toLowerCase().contains(query)).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.vertical(top: Radius.circular(32));
+    return DraggableScrollableSheet(
+      initialChildSize: 0.85,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF7B2FF2), Color(0xFFF357A8), Color(0xFFF2A93B)],
+            ),
+            boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 16, offset: Offset(0, -4))],
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 60,
+                height: 6,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white54,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar música...',
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF7B2FF2)),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.95),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _filtered.isEmpty
+                        ? const Center(child: Text('Nenhuma música encontrada.', style: TextStyle(color: Colors.white, fontSize: 18)))
+                        : ListView.builder(
+                            controller: scrollController,
+                            itemCount: _filtered.length,
+                            itemBuilder: (context, i) {
+                              final m = _filtered[i];
+                              final isTocando = _tocandoLink == m['link'] && _playerController != null;
+                              return Column(
+                                children: [
+                                  Card(
+                                    color: Colors.white.withOpacity(0.93),
+                                    margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                    child: ListTile(
+                                      leading: const Icon(Icons.library_music, color: Color(0xFF7B2FF2), size: 32),
+                                      title: Text(m['titulo'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      subtitle: Text('${m['autor'] ?? ''}  |  ${m['categoria'] ?? ''}'),
+                                      trailing: IconButton(
+                                        icon: Icon(
+                                          isTocando ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                                          color: const Color(0xFFF357A8),
+                                          size: 32,
+                                        ),
+                                        onPressed: () {
+                                          if (isTocando) {
+                                            _playerController?.pause();
+                                            setState(() => _tocandoLink = null);
+                                          } else {
+                                            _tocarMusica(m['link'] ?? '');
+                                          }
+                                        },
+                                      ),
+                                      onTap: () {
+                                        if (isTocando) {
+                                          _playerController?.pause();
+                                          setState(() => _tocandoLink = null);
+                                        } else {
+                                          _tocarMusica(m['link'] ?? '');
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  if (isTocando)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+                                      child: YoutubePlayer(
+                                        controller: _playerController!,
+                                        showVideoProgressIndicator: true,
+                                        progressIndicatorColor: Colors.pinkAccent,
+                                        width: double.infinity,
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DuelCarousel extends StatefulWidget {
+  final String profileId;
+  const _DuelCarousel({required this.profileId});
+
+  @override
+  State<_DuelCarousel> createState() => _DuelCarouselState();
+}
+
+class _DuelCarouselState extends State<_DuelCarousel> {
+  final _supabase = Supabase.instance.client;
+  List<Map<String, dynamic>> _duels = [];
+  Map<String, Map<String, dynamic>> _results = {};
+  Map<String, int> _totalQuestions = {};
+  Map<String, int> _challengerAnswers = {};
+  Map<String, int> _opponentAnswers = {};
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDuels();
+  }
+
+  Future<void> _fetchDuels() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    // Busca até 10 duelos ativos envolvendo o usuário
+    final duels = await _supabase
+        .from('quiz_duels')
+        .select('*, challenger:challenger_id(id, username, avatar_url), opponent:opponent_id(id, username, avatar_url)')
+        .or('challenger_id.eq.${widget.profileId},opponent_id.eq.${widget.profileId}')
+        .inFilter('status', ['em_andamento', 'aceito'])
+        .order('created_at', ascending: false)
+        .limit(10);
+    // Para cada duelo, buscar resultados dos dois usuários, total de questões e respostas de cada usuário
+    final resultsMap = <String, Map<String, dynamic>>{};
+    final totalQuestionsMap = <String, int>{};
+    final challengerAnswersMap = <String, int>{};
+    final opponentAnswersMap = <String, int>{};
+    for (final duel in duels) {
+      final duelId = duel['id'];
+      final challengerId = duel['challenger_id'];
+      final opponentId = duel['opponent_id'];
+      final quizId = duel['quiz_id'];
+      // Resultados
+      final results = await _supabase
+          .from('quiz_duel_results')
+          .select('user_id, score')
+          .eq('duel_id', duelId);
+      for (final r in results) {
+        resultsMap['${duelId}_${r['user_id']}'] = r;
+      }
+      // Total de questões do quiz
+      int totalQuestions = 0;
+      if (quizId != null) {
+        final questoes = await _supabase
+          .from('quiz_questions')
+          .select('id')
+          .eq('quiz_id', quizId);
+        totalQuestions = questoes.length;
+      }
+      totalQuestionsMap[duelId] = totalQuestions;
+      // Total de respostas do challenger
+      int challengerAnswers = 0;
+      if (challengerId != null) {
+        final respostas = await _supabase
+          .from('quiz_answers')
+          .select('id')
+          .eq('user_id', challengerId)
+          .eq('duel_id', duelId);
+        challengerAnswers = respostas.length;
+      }
+      challengerAnswersMap[duelId] = challengerAnswers;
+      // Total de respostas do opponent
+      int opponentAnswers = 0;
+      if (opponentId != null) {
+        final respostas = await _supabase
+          .from('quiz_answers')
+          .select('id')
+          .eq('user_id', opponentId)
+          .eq('duel_id', duelId);
+        opponentAnswers = respostas.length;
+      }
+      opponentAnswersMap[duelId] = opponentAnswers;
+    }
+    setState(() {
+      _duels = List<Map<String, dynamic>>.from(duels);
+      _results = resultsMap;
+      _totalQuestions = totalQuestionsMap;
+      _challengerAnswers = challengerAnswersMap;
+      _opponentAnswers = opponentAnswersMap;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_duels.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(child: Text('Nenhum duelo em andamento.')),
+      );
+    }
+    final screenHeight = MediaQuery.of(context).size.height;
+    final cardHeight = screenHeight * 0.38;
+    return SizedBox(
+      height: cardHeight.clamp(240, 340),
+      child: PageView.builder(
+        itemCount: _duels.length,
+        controller: PageController(viewportFraction: 0.92),
+        itemBuilder: (context, index) {
+          final duel = _duels[index];
+          final duelId = duel['id'];
+          final challengerId = duel['challenger_id'];
+          final opponentId = duel['opponent_id'];
+          final challengerResult = _results['${duelId}_${challengerId}'];
+          final opponentResult = _results['${duelId}_${opponentId}'];
+          final totalQuestions = _totalQuestions[duelId];
+          final challengerAnswers = _challengerAnswers[duelId];
+          final opponentAnswers = _opponentAnswers[duelId];
+          return _DuelCardView(
+            duel: duel,
+            challengerResult: challengerResult,
+            opponentResult: opponentResult,
+            totalQuestions: totalQuestions,
+            challengerAnswers: challengerAnswers,
+            opponentAnswers: opponentAnswers,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DuelCardView extends StatelessWidget {
+  final Map<String, dynamic> duel;
+  final Map<String, dynamic>? challengerResult;
+  final Map<String, dynamic>? opponentResult;
+  final int? totalQuestions;
+  final int? challengerAnswers;
+  final int? opponentAnswers;
+  const _DuelCardView({required this.duel, this.challengerResult, this.opponentResult, this.totalQuestions, this.challengerAnswers, this.opponentAnswers});
+
+  @override
+  Widget build(BuildContext context) {
+    final challenger = duel['challenger'] ?? {};
+    final opponent = duel['opponent'] ?? {};
+    final challengerScore = (challengerResult?['score'] ?? 0) as int;
+    final opponentScore = (opponentResult?['score'] ?? 0) as int;
+    final totalQ = totalQuestions ?? 0;
+    final challengerProgress = (totalQ > 0) ? (challengerScore / totalQ).clamp(0.0, 1.0) : 0.0;
+    final opponentProgress = (totalQ > 0) ? (opponentScore / totalQ).clamp(0.0, 1.0) : 0.0;
+    const barHeight = 14.0;
+    const barRadius = Radius.circular(8);
+    return Card(
+      margin: const EdgeInsets.all(16),
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Challenger
+                Expanded(
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        backgroundImage: challenger['avatar_url'] != null ? NetworkImage(challenger['avatar_url']) : null,
+                        radius: 28,
+                        child: challenger['avatar_url'] == null ? Icon(Icons.person, size: 32) : null,
+                      ),
+                      const SizedBox(height: 6),
+                      Text('@${challenger['username'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      ClipRRect(
+                        borderRadius: BorderRadius.all(barRadius),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween<double>(begin: 0, end: challengerProgress),
+                          duration: const Duration(milliseconds: 800),
+                          curve: Curves.easeInOut,
+                          builder: (context, value, child) => Container(
+                            height: barHeight,
+                            width: double.infinity,
+                            color: Colors.grey[300],
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 400),
+                                curve: Curves.easeInOut,
+                                height: barHeight,
+                                width: value * MediaQuery.of(context).size.width,
+                                decoration: const BoxDecoration(
+                                  color: Colors.deepPurple,
+                                  borderRadius: BorderRadius.all(barRadius),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('${challengerScore} de $totalQ', style: const TextStyle(fontSize: 13)),
+                      const SizedBox(height: 2),
+                      Text('Pontuação', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                      Text('$challengerScore pontos', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 18),
+                Icon(Icons.menu_book, size: 38, color: Colors.black87),
+                const SizedBox(width: 18),
+                // Opponent
+                Expanded(
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        backgroundImage: opponent['avatar_url'] != null ? NetworkImage(opponent['avatar_url']) : null,
+                        radius: 28,
+                        child: opponent['avatar_url'] == null ? Icon(Icons.person, size: 32) : null,
+                      ),
+                      const SizedBox(height: 6),
+                      Text('@${opponent['username'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      ClipRRect(
+                        borderRadius: BorderRadius.all(barRadius),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween<double>(begin: 0, end: opponentProgress),
+                          duration: const Duration(milliseconds: 800),
+                          curve: Curves.easeInOut,
+                          builder: (context, value, child) => Container(
+                            height: barHeight,
+                            width: double.infinity,
+                            color: Colors.grey[300],
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 400),
+                                curve: Curves.easeInOut,
+                                height: barHeight,
+                                width: value * MediaQuery.of(context).size.width,
+                                decoration: const BoxDecoration(
+                                  color: Colors.deepPurple,
+                                  borderRadius: BorderRadius.all(barRadius),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('${opponentScore} de $totalQ', style: const TextStyle(fontSize: 13)),
+                      const SizedBox(height: 2),
+                      Text('Pontuação', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                      Text('$opponentScore pontos', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              challengerScore > opponentScore
+                  ? '@${challenger['username']} está vencendo!'
+                  : opponentScore > challengerScore
+                      ? '@${opponent['username']} está vencendo!'
+                      : 'Empate!',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                final duelId = duel['id'];
+                if (duelId != null) {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => DueloQuizPage(duelId: duelId),
+                    ),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              child: const Text('Continuar Quiz'),
+            ),
+          ],
         ),
       ),
     );
