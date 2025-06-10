@@ -8,10 +8,7 @@ class SupabaseService {
     return _instance;
   }
 
-  SupabaseService._internal();
-
-  Future<void> initialize({required String url, required String anonKey}) async {
-    await Supabase.initialize(url: url, anonKey: anonKey);
+  SupabaseService._internal() {
     client = Supabase.instance.client;
   }
 } 

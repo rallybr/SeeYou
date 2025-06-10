@@ -14,9 +14,9 @@ void main() async {
       Offset(0, 0),
       Offset(width.toDouble(), height.toDouble()),
       [
-        Color(0xFF2D2EFF),
-        Color(0xFF7B2FF2),
-        Color(0xFFE94057),
+        Color(0xFF2D2EFF), // Azul
+        Color(0xFF7B2FF2), // Roxo
+        Color(0xFFE94057), // Rosa
       ],
       [0.0, 0.5, 1.0],
     );

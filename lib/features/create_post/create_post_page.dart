@@ -125,125 +125,200 @@ class _CreatePostPageState extends State<CreatePostPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Nova publicação'),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
+    return Stack(
+      children: [
+        Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF6A85F1), // azul
+                Color(0xFFFBC2EB), // rosa claro
+                Color(0xFFF9F586), // amarelo claro
+                Color(0xFFF68084), // rosa
+              ],
+            ),
+          ),
         ),
-        actions: [
-          if (_selectedImages.isNotEmpty)
-            TextButton(
-              onPressed: _isLoading ? null : _publishPost,
-              child: _isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text(
-                      'Publicar',
-                      style: TextStyle(
-                        color: Colors.blue,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            title: const Text('Nova publicação'),
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
             ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (_selectedImages.isEmpty)
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.add_photo_alternate, size: 80, color: Colors.grey),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      onPressed: _showImageSourceDialog,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Selecionar fotos'),
+            actions: [
+              if (_selectedImages.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _publishPost,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      elevation: 6,
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.black26,
+                    ).copyWith(
+                      backgroundColor: MaterialStateProperty.resolveWith<Color?>((states) {
+                        return null;
+                      }),
+                      foregroundColor: MaterialStateProperty.all<Color>(Colors.white),
                     ),
-                  ],
-                ),
-              ),
-            )
-          else
-            Expanded(
-              child: Column(
-                children: [
-                  SizedBox(
-                    height: 200,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _selectedImages.length + 1,
-                      itemBuilder: (context, index) {
-                        if (index == _selectedImages.length) {
-                          return Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: InkWell(
-                              onTap: _showImageSourceDialog,
-                              child: Container(
-                                width: 150,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.add_photo_alternate, size: 50),
-                              ),
-                            ),
-                          );
-                        }
-                        return Stack(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.file(
-                                  _selectedImages[index],
-                                  width: 150,
-                                  height: 200,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              top: 0,
-                              right: 0,
-                              child: IconButton(
-                                icon: const Icon(Icons.close, color: Colors.white),
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedImages.removeAt(index);
-                                  });
-                                },
-                              ),
-                            ),
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF2D2EFF),
+                            Color(0xFF7B2FF2),
+                            Color(0xFFE94057),
                           ],
-                        );
-                      },
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: TextField(
-                      controller: _captionController,
-                      maxLines: 5,
-                      decoration: const InputDecoration(
-                        hintText: 'Escreva uma legenda...',
-                        border: OutlineInputBorder(),
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 80, minHeight: 36),
+                        alignment: Alignment.center,
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text(
+                                'Publicar',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+            ],
+            backgroundColor: Colors.black.withOpacity(0.4),
+            elevation: 0,
+            titleTextStyle: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
             ),
-        ],
-      ),
+          ),
+          body: SafeArea(
+            child: Column(
+              children: [
+                if (_selectedImages.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.add_photo_alternate, size: 80, color: Colors.grey),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: _showImageSourceDialog,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Selecionar fotos'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.white.withOpacity(0.85),
+                              foregroundColor: Colors.black87,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                              textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          height: 200,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _selectedImages.length + 1,
+                            itemBuilder: (context, index) {
+                              if (index == _selectedImages.length) {
+                                return Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: InkWell(
+                                    onTap: _showImageSourceDialog,
+                                    child: Container(
+                                      width: 150,
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: Colors.grey),
+                                        borderRadius: BorderRadius.circular(8),
+                                        color: Colors.white.withOpacity(0.7),
+                                      ),
+                                      child: const Icon(Icons.add_photo_alternate, size: 50),
+                                    ),
+                                  ),
+                                );
+                              }
+                              return Stack(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.file(
+                                        _selectedImages[index],
+                                        width: 150,
+                                        height: 200,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 0,
+                                    right: 0,
+                                    child: IconButton(
+                                      icon: const Icon(Icons.close, color: Colors.white),
+                                      onPressed: () {
+                                        setState(() {
+                                          _selectedImages.removeAt(index);
+                                        });
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: TextField(
+                            controller: _captionController,
+                            maxLines: 5,
+                            decoration: const InputDecoration(
+                              hintText: 'Escreva uma legenda...',
+                              border: OutlineInputBorder(),
+                              filled: true,
+                              fillColor: Colors.white70,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

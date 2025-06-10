@@ -325,6 +325,48 @@ class _DashboardDrawer extends StatelessWidget {
               ),
             ],
           ),
+          // Menu Vocacional
+          ExpansionTile(
+            leading: const Icon(Icons.psychology, color: Color(0xFFB71C1C)),
+            title: const Text('Vocacional', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFB71C1C))),
+            children: [
+              ListTile(
+                leading: const Icon(Icons.quiz, color: Color(0xFF2D2EFF)),
+                title: const Text('Criar Teste Vocacional', style: TextStyle(color: Color(0xFF2D2EFF))),
+                onTap: () {
+                  Navigator.of(context).pushNamed('/admin/vocacional/criar_teste');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.group_work, color: Color(0xFF2D2EFF)),
+                title: const Text('Cadastrar Projeto', style: TextStyle(color: Color(0xFF2D2EFF))),
+                onTap: () {
+                  Navigator.of(context).pushNamed('/admin/vocacional/cadastrar_projeto');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.question_answer, color: Color(0xFF2D2EFF)),
+                title: const Text('Criar Questão', style: TextStyle(color: Color(0xFF2D2EFF))),
+                onTap: () {
+                  Navigator.of(context).pushNamed('/admin/vocacional/criar_questao');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.manage_accounts, color: Color(0xFF2D2EFF)),
+                title: const Text('Gerenciar', style: TextStyle(color: Color(0xFF2D2EFF))),
+                onTap: () {
+                  Navigator.of(context).pushNamed('/admin/vocacional/gerenciar');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.verified, color: Color(0xFF2D2EFF)),
+                title: const Text('Projetos (Aprovados)', style: TextStyle(color: Color(0xFF2D2EFF))),
+                onTap: () {
+                  Navigator.of(context).pushNamed('/admin/vocacional/aprovados');
+                },
+              ),
+            ],
+          ),
           // Bible Quiz menu com submenus
           ExpansionTile(
             leading: Icon(icons[6], color: Color(0xFFB71C1C)),

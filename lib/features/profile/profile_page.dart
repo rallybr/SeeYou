@@ -16,6 +16,8 @@ import '../duel/notificacao_desafio_page.dart';
 import '../duel/executar_duelo_page.dart';
 import '../duel/duelo_quiz_page.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:lottie/lottie.dart';
+import 'dart:async';
 
 class ProfilePage extends StatefulWidget {
   final String? profileId; // Se nulo, mostra o perfil do logado
@@ -37,6 +39,7 @@ class _ProfilePageState extends State<ProfilePage> {
   int followingCount = 0;
   Map<String, dynamic>? _desafioPendente;
   String? _error;
+  Map<String, dynamic>? _vocacionalAprovado;
 
   @override
   void initState() {
@@ -45,6 +48,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _fetchCurrentUserAvatar();
     _fetchStats();
     _verificarDesafioPendente();
+    _fetchVocacionalAprovado();
   }
 
   Future<void> _fetchProfile() async {
@@ -141,6 +145,25 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _fetchVocacionalAprovado() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    final idToFetch = widget.profileId ?? user.id;
+    final data = await Supabase.instance.client
+        .from('vocational_requests')
+        .select('id, status, project_id, user_id, profiles(id, full_name, avatar_url), vocational_projects(id, nome, logo_url)')
+        .eq('user_id', idToFetch)
+        .eq('status', 'aprovado')
+        .order('created_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    if (mounted) {
+      setState(() {
+        _vocacionalAprovado = data;
+      });
+    }
+  }
+
   void _onItemTapped(int index) {
     if (index == 0) {
       Navigator.of(context).pushAndRemoveUntil(
@@ -161,106 +184,183 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBody: true,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF6A85F1),
-              Color(0xFFFBC2EB),
-              Color(0xFFF9F586),
-              Color(0xFFF68084),
-            ],
+      extendBodyBehindAppBar: true,
+      body: Stack(
+        children: [
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF6A85F1),
+                  Color(0xFFFBC2EB),
+                  Color(0xFFF9F586),
+                  Color(0xFFF68084),
+                ],
+              ),
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: loading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null
-                  ? Center(child: Text(_error!))
-                  : profile == null
-                      ? const Center(child: Text('Perfil não encontrado'))
-                      : SingleChildScrollView(
-                          child: Column(
-                            children: [
-                              _ProfileHeader(profile: profile!),
-                              if (profile != null && profile!['id'] != currentUserId)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  child: FollowButton(profileId: profile!['id']),
+          SafeArea(
+            child: loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(child: Text(_error!))
+                    : profile == null
+                        ? const Center(child: Text('Perfil não encontrado'))
+                        : SingleChildScrollView(
+                            child: Column(
+                              children: [
+                                _ProfileHeader(profile: profile!),
+                                if (profile != null && profile!['id'] != currentUserId)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    child: FollowButton(profileId: profile!['id']),
+                                  ),
+                                _ProfileStats(
+                                  postCount: postCount,
+                                  followersCount: followersCount,
+                                  followingCount: followingCount,
                                 ),
-                              _ProfileStats(
-                                postCount: postCount,
-                                followersCount: followersCount,
-                                followingCount: followingCount,
-                              ),
-                              _ProfileBio(profile: profile!),
-                              if (_desafioPendente != null)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  child: Card(
-                                    color: Colors.yellow[50],
-                                    child: ListTile(
-                                      leading: const Icon(Icons.sports_esports, color: Colors.orange),
-                                      title: Text('Desafio de Quiz recebido de @${_desafioPendente!['challenger']['username']}'),
-                                      subtitle: const Text('Você deseja aceitar ou rejeitar o desafio?'),
-                                      trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          TextButton(
-                                            onPressed: () async {
-                                              await _supabase.from('quiz_duels').update({
-                                                'status': 'em_andamento',
-                                              }).eq('id', _desafioPendente!['id']);
-                                              final duelId = _desafioPendente?['id'];
-                                              final quizId = _desafioPendente?['quiz_id'];
-                                              setState(() {
-                                                _desafioPendente = null;
-                                              });
-                                              if (quizId != null && context.mounted) {
-                                                Navigator.of(context).push(
-                                                  MaterialPageRoute(
-                                                    builder: (_) => ExecutarDueloPage(
-                                                      duelId: _desafioPendente!['id'],
+                                _ProfileBio(profile: profile!),
+                                if (_desafioPendente != null)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    child: Card(
+                                      color: Colors.yellow[50],
+                                      child: ListTile(
+                                        leading: const Icon(Icons.sports_esports, color: Colors.orange),
+                                        title: Text('Desafio de Quiz recebido de @${_desafioPendente!['challenger']['username']}'),
+                                        subtitle: const Text('Você deseja aceitar ou rejeitar o desafio?'),
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            TextButton(
+                                              onPressed: () async {
+                                                await _supabase.from('quiz_duels').update({
+                                                  'status': 'em_andamento',
+                                                }).eq('id', _desafioPendente!['id']);
+                                                final duelId = _desafioPendente?['id'];
+                                                final quizId = _desafioPendente?['quiz_id'];
+                                                if (quizId != null && context.mounted) {
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder: (_) => ExecutarDueloPage(
+                                                        duelId: duelId!,
+                                                      ),
                                                     ),
-                                                  ),
+                                                  );
+                                                }
+                                                setState(() {
+                                                  _desafioPendente = null;
+                                                });
+                                              },
+                                              child: const Text('Aceitar'),
+                                            ),
+                                            TextButton(
+                                              onPressed: () async {
+                                                await _supabase.from('quiz_duels').update({
+                                                  'status': 'rejeitado',
+                                                }).eq('id', _desafioPendente!['id']);
+                                                setState(() {
+                                                  _desafioPendente = null;
+                                                });
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text('Desafio rejeitado.')),
                                                 );
-                                              }
-                                            },
-                                            child: const Text('Aceitar'),
-                                          ),
-                                          TextButton(
-                                            onPressed: () async {
-                                              await _supabase.from('quiz_duels').update({
-                                                'status': 'rejeitado',
-                                              }).eq('id', _desafioPendente!['id']);
-                                              setState(() {
-                                                _desafioPendente = null;
-                                              });
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(content: Text('Desafio rejeitado.')),
-                                              );
-                                            },
-                                            child: const Text('Rejeitar'),
-                                          ),
-                                        ],
+                                              },
+                                              child: const Text('Rejeitar'),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              _buildProfileActions(),
-                              _ProfileHighlights(),
-                              const Divider(height: 1),
-                              _ProfileTabs(),
-                              _DuelCarousel(profileId: profile!['id']),
-                            ],
+                                _buildProfileActions(),
+                                _ProfileHighlights(),
+                                const Divider(height: 1),
+                                _ProfileTabs(),
+                                _DuelCarousel(profileId: profile!['id']),
+                                if (_vocacionalAprovado != null && _vocacionalAprovado!['vocational_projects'] != null)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    child: ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxWidth: MediaQuery.of(context).size.width * 0.92,
+                                      ),
+                                      child: Card(
+                                        margin: const EdgeInsets.all(16),
+                                        color: Colors.deepPurple[50],
+                                        elevation: 6,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(28),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                crossAxisAlignment: CrossAxisAlignment.center,
+                                                children: [
+                                                  if (_vocacionalAprovado!['vocational_projects']?['logo_url'] != null &&
+                                                      (_vocacionalAprovado!['vocational_projects']?['logo_url'] as String).isNotEmpty)
+                                                    CircleAvatar(
+                                                      radius: 28,
+                                                      backgroundImage: NetworkImage(_vocacionalAprovado!['vocational_projects']['logo_url']),
+                                                      backgroundColor: Colors.white,
+                                                    ),
+                                                  const SizedBox(width: 16),
+                                                  Expanded(
+                                                    child: Column(
+                                                      mainAxisAlignment: MainAxisAlignment.center,
+                                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                                      children: [
+                                                        Row(
+                                                          mainAxisAlignment: MainAxisAlignment.center,
+                                                          children: [
+                                                            const Text(
+                                                              'Me Identifiquei',
+                                                              style: TextStyle(
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 22,
+                                                                color: Colors.deepPurple,
+                                                              ),
+                                                              textAlign: TextAlign.center,
+                                                            ),                                                            
+                                                          ],
+                                                        ),
+                                                        const SizedBox(height: 8),
+                                                        Text(
+                                                          _vocacionalAprovado!['vocational_projects']?['nome'] ?? '',
+                                                          style: const TextStyle(
+                                                            fontWeight: FontWeight.bold,
+                                                            fontSize: 16,
+                                                          ),
+                                                          textAlign: TextAlign.center,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 16),
+                                                  SizedBox(
+                                                    width: 70,
+                                                    height: 70,
+                                                    child: Lottie.asset('assets/animations/happy_emoji.json', repeat: true),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-        ),
+          ),
+        ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
@@ -295,43 +395,80 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
       ),
-      appBar: AppBar(
-        title: const Text('Perfil'),
-        backgroundColor: const Color(0xFF2D2EFF),
-        actions: [
-          if (_desafioPendente != null)
-            IconButton(
-              icon: const Icon(Icons.sports_esports),
-              tooltip: 'Desafio Pendente',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => NotificacaoDesafioPage(
-                      desafio: _desafioPendente!,
-                      desafiante: _desafioPendente!['challenger'],
-                    ),
-                  ),
-                ).then((aceito) {
-                  if (aceito == true) {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ExecutarDueloPage(
-                          duelId: _desafioPendente!['id'],
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(68),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBar(
+              title: const Text('Perfil', style: TextStyle(color: Colors.white)),
+              backgroundColor: Colors.black.withOpacity(0.6),
+              elevation: 0,
+              iconTheme: const IconThemeData(color: Colors.white),
+              actions: [
+                if (_desafioPendente != null)
+                  IconButton(
+                    icon: const Icon(Icons.sports_esports),
+                    tooltip: 'Desafio Pendente',
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => NotificacaoDesafioPage(
+                            desafio: _desafioPendente!,
+                            desafiante: _desafioPendente!['challenger'],
+                          ),
                         ),
-                      ),
-                    );
-                  }
-                  _verificarDesafioPendente();
-                });
-              },
+                      ).then((aceito) {
+                        if (aceito == true) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ExecutarDueloPage(
+                                duelId: _desafioPendente!['id'],
+                              ),
+                            ),
+                          );
+                        }
+                        _verificarDesafioPendente();
+                      });
+                    },
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () {
+                    Navigator.of(context).pushNamed('/settings');
+                  },
+                ),
+              ],
             ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              Navigator.of(context).pushNamed('/settings');
-            },
-          ),
-        ],
+            Container(
+              height: 2,
+              width: double.infinity,
+              color: Colors.white,
+            ),
+            Container(
+              height: 10,
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color(0xFF2D2EFF), // azul
+                    Color(0xFF7B2FF2), // roxo
+                    Color(0xFFE94057), // vermelho
+                  ],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26, // sombra bem suave
+                    blurRadius: 6,
+                    offset: Offset(0, 3),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -345,34 +482,124 @@ class _ProfilePageState extends State<ProfilePage> {
         children: [
           if (isOwnProfile) ...[
             Expanded(
-              child: OutlinedButton(
-                onPressed: () {
+              child: GestureDetector(
+                onTap: () {
                   Navigator.of(context).pushNamed('/vocational_test');
                 },
-                child: const Text('Vocacional'),
+                child: Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF2D2EFF),
+                        Color(0xFF7B2FF2),
+                        Color(0xFFE94057),
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
+                    borderRadius: BorderRadius.circular(25),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'Vocacional',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
               ),
             ),
             const SizedBox(width: 8),
           ],
           Expanded(
-            child: OutlinedButton(
-              onPressed: () {
+            child: GestureDetector(
+              onTap: () {
                 Navigator.of(context).pushNamed('/bible_quiz');
               },
-              child: const Text('Quiz'),
+              child: Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF2D2EFF),
+                      Color(0xFF7B2FF2),
+                      Color(0xFFE94057),
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(25),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 4,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: const Text(
+                  'Quiz',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: OutlinedButton(
-              onPressed: () {
+            child: GestureDetector(
+              onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const HistoricoDuelosPage(),
                   ),
                 );
               },
-              child: const Text('Duelos'),
+              child: Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF2D2EFF),
+                      Color(0xFF7B2FF2),
+                      Color(0xFFE94057),
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 4,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: const Text(
+                  'Duelos',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
             ),
           ),
           if (isOtherUser) ...[
@@ -1389,6 +1616,8 @@ class _DuelCarousel extends StatefulWidget {
 
 class _DuelCarouselState extends State<_DuelCarousel> {
   final _supabase = Supabase.instance.client;
+  final PageController _pageController = PageController(viewportFraction: 0.92);
+  Timer? _autoplayTimer;
   List<Map<String, dynamic>> _duels = [];
   Map<String, Map<String, dynamic>> _results = {};
   Map<String, int> _totalQuestions = {};
@@ -1400,6 +1629,32 @@ class _DuelCarouselState extends State<_DuelCarousel> {
   void initState() {
     super.initState();
     _fetchDuels();
+    _startAutoplay();
+  }
+
+  void _startAutoplay() {
+    _autoplayTimer?.cancel();
+    _autoplayTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (_duels.isEmpty || !_pageController.hasClients) return;
+      int currentPage = _pageController.page?.round() ?? 0;
+      int nextPage = currentPage + 1;
+      if (nextPage >= _duels.length) {
+        _pageController.jumpToPage(0);
+      } else {
+        _pageController.animateToPage(
+          nextPage,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoplayTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchDuels() async {
@@ -1472,6 +1727,7 @@ class _DuelCarouselState extends State<_DuelCarousel> {
       _opponentAnswers = opponentAnswersMap;
       _loading = false;
     });
+    _startAutoplay(); // Reinicia autoplay ao atualizar duelos
   }
 
   @override
@@ -1494,7 +1750,7 @@ class _DuelCarouselState extends State<_DuelCarousel> {
       height: cardHeight.clamp(240, 340),
       child: PageView.builder(
         itemCount: _duels.length,
-        controller: PageController(viewportFraction: 0.92),
+        controller: _pageController,
         itemBuilder: (context, index) {
           final duel = _duels[index];
           final duelId = duel['id'];
@@ -1575,14 +1831,14 @@ class _DuelCardView extends StatelessWidget {
                             color: Colors.grey[300],
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 400),
-                                curve: Curves.easeInOut,
-                                height: barHeight,
-                                width: value * MediaQuery.of(context).size.width,
-                                decoration: const BoxDecoration(
-                                  color: Colors.deepPurple,
-                                  borderRadius: BorderRadius.all(barRadius),
+                              child: FractionallySizedBox(
+                                widthFactor: value,
+                                child: Container(
+                                  height: barHeight,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.deepPurple,
+                                    borderRadius: BorderRadius.all(barRadius),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1624,14 +1880,14 @@ class _DuelCardView extends StatelessWidget {
                             color: Colors.grey[300],
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 400),
-                                curve: Curves.easeInOut,
-                                height: barHeight,
-                                width: value * MediaQuery.of(context).size.width,
-                                decoration: const BoxDecoration(
-                                  color: Colors.deepPurple,
-                                  borderRadius: BorderRadius.all(barRadius),
+                              child: FractionallySizedBox(
+                                widthFactor: value,
+                                child: Container(
+                                  height: barHeight,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.deepPurple,
+                                    borderRadius: BorderRadius.all(barRadius),
+                                  ),
                                 ),
                               ),
                             ),
@@ -2060,4 +2316,4 @@ class _EmailDialogState extends State<EmailDialog> {
       ),
     );
   }
-} 
+}

@@ -10,6 +10,12 @@ import 'features/bible_quiz/bible_quiz_page.dart';
 import 'features/admin/cadastrar_musica_page.dart';
 import 'features/admin/cadastrar_video_page.dart';
 import 'features/admin/cadastrar_mensagem_page.dart';
+import 'features/admin/vocacional/criar_teste_vocacional_page.dart';
+import 'features/admin/vocacional/cadastrar_projeto_vocacional_page.dart';
+import 'features/admin/vocacional/criar_questao_vocacional_page.dart';
+import 'features/vocational_quiz/vocational_quiz_page.dart';
+import 'features/admin/vocacional/gerenciar_solicitacoes_vocacionais_page.dart';
+import 'features/admin/vocacional/aprovados_projeto_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,6 +73,12 @@ class MyApp extends StatelessWidget {
         '/admin/musicas': (context) => const CadastrarMusicaPage(),
         '/admin/videos': (context) => const CadastrarVideoPage(),
         '/admin/mensagens': (context) => const CadastrarMensagemPage(),
+        '/admin/vocacional/criar_teste': (context) => const CriarTesteVocacionalPage(),
+        '/admin/vocacional/cadastrar_projeto': (context) => const CadastrarProjetoVocacionalPage(),
+        '/admin/vocacional/criar_questao': (context) => const CriarQuestaoVocacionalPage(),
+        '/vocational_test': (context) => const VocationalQuizPage(),
+        '/admin/vocacional/gerenciar': (context) => const GerenciarSolicitacoesVocacionaisPage(),
+        '/admin/vocacional/aprovados': (context) => const AprovadosProjetoPage(),
       },
     );
   }

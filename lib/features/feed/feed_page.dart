@@ -147,6 +147,28 @@ class _FeedPageState extends State<FeedPage> {
                     : null,
               ),
               _StoriesBar(),
+              Container(
+                height: 10,
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0xFF2D2EFF), // azul
+                      Color(0xFF7B2FF2), // roxo
+                      Color(0xFFE94057), // vermelho
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black26, // sombra bem suave
+                      blurRadius: 6,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+              ),
               const Divider(height: 1),
               Expanded(child: _FeedList()),
             ],
@@ -360,7 +382,7 @@ class _FeedAppBar extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Image.asset(
-            'assets/images/logofju.png',
+            'assets/images/logo.png',
             height: 45,
           ),
           Row(
@@ -430,11 +452,45 @@ class _StoriesBar extends StatefulWidget {
 
 class _StoriesBarState extends State<_StoriesBar> {
   late Future<List<Map<String, dynamic>>> _usersFuture;
+  PageController? _pageController;
+  Timer? _autoplayTimer;
+  int _itemCount = 0;
+  List<Map<String, dynamic>> _users = [];
+  static const int _virtualItemCount = 10000;
 
   @override
   void initState() {
     super.initState();
     _usersFuture = _fetchUsers();
+    _usersFuture.then((users) {
+      setState(() {
+        _users = users;
+        _itemCount = users.length;
+        _pageController = PageController(initialPage: _itemCount > 0 ? _itemCount * 1000 : 0, viewportFraction: 0.25);
+      });
+      _startAutoplay();
+    });
+  }
+
+  void _startAutoplay() {
+    _autoplayTimer?.cancel();
+    _autoplayTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (_itemCount == 0 || _pageController == null || !_pageController!.hasClients) return;
+      int currentPage = _pageController!.page?.round() ?? 0;
+      int nextPage = currentPage + 1;
+      _pageController!.animateToPage(
+        nextPage,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoplayTimer?.cancel();
+    _pageController?.dispose();
+    super.dispose();
   }
 
   Future<List<Map<String, dynamic>>> _fetchUsers() async {
@@ -460,49 +516,71 @@ class _StoriesBarState extends State<_StoriesBar> {
           if (users.isEmpty) {
             return const Center(child: Text('Nenhum usuário encontrado.'));
           }
-          return ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            itemCount: users.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 16),
+          if (_pageController == null) {
+            return const SizedBox.shrink();
+          }
+          return PageView.builder(
+            controller: _pageController,
+            itemCount: _virtualItemCount,
+            padEnds: false,
             itemBuilder: (context, i) {
-              final user = users[i];
-              return Column(
-                children: [
-                  Container(
-                    width: 68,
-                    height: 68,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFB2FEFA), Color(0xFF6A85F1), Color(0xFF8F5CFF), Color(0xFF6A1B9A)],
+              final user = users[i % users.length];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        gradient: const LinearGradient(
+                          colors: [
+                            Color(0xFF9C27B0), // vermelho
+                            Color(0xFF7B2FF2), // roxo
+                            Color(0xFFE040FB), // azul
+                          ],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(3.0),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            width: 62,
+                            height: 62,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.rectangle,
+                              color: Colors.white,
+                              image: user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty
+                                  ? DecorationImage(
+                                      image: NetworkImage(user['avatar_url']),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
+                            ),
+                            child: (user['avatar_url'] == null || user['avatar_url'].toString().isEmpty)
+                                ? const Icon(Icons.person, size: 30)
+                                : null,
+                          ),
+                        ),
                       ),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(3.0),
-                      child: CircleAvatar(
-                        radius: 30,
-                        backgroundImage: user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty
-                            ? NetworkImage(user['avatar_url'])
-                            : null,
-                        child: (user['avatar_url'] == null || user['avatar_url'].toString().isEmpty)
-                            ? const Icon(Icons.person, size: 30)
-                            : null,
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: 70,
+                      child: Text(
+                        user['username'] ?? '',
+                        style: const TextStyle(fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        textAlign: TextAlign.center,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  SizedBox(
-                    width: 70,
-                    child: Text(
-                      user['username'] ?? '',
-                      style: const TextStyle(fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               );
             },
           );

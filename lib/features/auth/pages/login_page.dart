@@ -60,10 +60,9 @@ class _LoginPageState extends State<LoginPage> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF6A85F1), // azul
-              Color(0xFFFBC2EB), // rosa claro
-              Color(0xFFF9F586), // amarelo claro
-              Color(0xFFF68084), // rosa
+              Color(0xFF2D2EFF), // Azul vibrante
+              Color(0xFF7B2FF2), // Roxo
+              Color(0xFFE94057), // Vermelho/rosa
             ],
           ),
         ),
@@ -112,6 +111,30 @@ class _LoginPageState extends State<LoginPage> {
                                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                               )
                             : const Text('Entrar'),
+                      ),
+                    ),
+                    SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          elevation: 2,
+                        ),
+                        onPressed: () async {
+                          try {
+                            await Supabase.instance.client.auth.signInWithOAuth(OAuthProvider.google);
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Erro ao fazer login com Google: ' + e.toString())),
+                              );
+                            }
+                          }
+                        },
+                        child: const Text('Entrar com Google'),
                       ),
                     ),
                     TextButton(

@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
   supabase_flutter: ^2.9.0
+  lottie: ^2.7.0
   flutter_dotenv: ^5.1.0
   sign_in_with_apple: ^7.0.1
   flutter_localizations:
@@ -107,10 +108,23 @@ flutter:
     - assets/sounds/error.mp3
     - assets/images/splash_logo.png
     - assets/images/splash_gradient.png
+    - assets/images/logo.png
+    - assets/animations/happy_emoji.json
 
 flutter_native_splash:
-  image: assets/images/splash_logo.png
   background_image: assets/images/splash_gradient.png
+  image: assets/images/logofju.png
   android: true
   ios: true
   web: false
+  color: "#FAFAD2"
+  color_dark: "#FAFAD2"
+  android_12:
+    image: assets/images/logofju.png
+    icon_background_color: "#FAFAD2"
+    icon_background_color_dark: "#FAFAD2"
+  ios_content_mode: center
+  android_gravity: center
+  fullscreen: true
+  branding: assets/images/logofju.png
+  branding_mode: bottom
