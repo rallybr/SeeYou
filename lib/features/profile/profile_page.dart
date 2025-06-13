@@ -40,6 +40,8 @@ class _ProfilePageState extends State<ProfilePage> {
   Map<String, dynamic>? _desafioPendente;
   String? _error;
   Map<String, dynamic>? _vocacionalAprovado;
+  List<Map<String, dynamic>> _reflexoes = [];
+  bool _verMaisReflexoes = false;
 
   @override
   void initState() {
@@ -49,6 +51,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _fetchStats();
     _verificarDesafioPendente();
     _fetchVocacionalAprovado();
+    _fetchReflexoes();
   }
 
   Future<void> _fetchProfile() async {
@@ -164,6 +167,25 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _fetchReflexoes() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    final idToFetch = widget.profileId ?? user.id;
+    final data = await Supabase.instance.client
+        .from('reflexoes')
+        .select()
+        .eq('user_id', idToFetch)
+        .order('ordem', ascending: true)
+        .order('created_at', ascending: true);
+    print('Reflexoes carregadas do Supabase:');
+    for (var r in data) {
+      print(r);
+    }
+    setState(() {
+      _reflexoes = List<Map<String, dynamic>>.from(data);
+    });
+  }
+
   void _onItemTapped(int index) {
     if (index == 0) {
       Navigator.of(context).pushAndRemoveUntil(
@@ -247,15 +269,14 @@ class _ProfilePageState extends State<ProfilePage> {
                                                 if (quizId != null && context.mounted) {
                                                   Navigator.of(context).push(
                                                     MaterialPageRoute(
-                                                      builder: (_) => ExecutarDueloPage(
-                                                        duelId: duelId!,
-                                                      ),
+                                                      builder: (_) => DueloQuizPage(duelId: duelId!),
                                                     ),
                                                   );
                                                 }
                                                 setState(() {
                                                   _desafioPendente = null;
                                                 });
+                                                _fetchProfile();
                                               },
                                               child: const Text('Aceitar'),
                                             ),
@@ -267,9 +288,12 @@ class _ProfilePageState extends State<ProfilePage> {
                                                 setState(() {
                                                   _desafioPendente = null;
                                                 });
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text('Desafio rejeitado.')),
-                                                );
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(content: Text('Desafio rejeitado.')),
+                                                  );
+                                                }
+                                                // Não navegue para ExecutarDueloPage aqui!
                                               },
                                               child: const Text('Rejeitar'),
                                             ),
@@ -356,6 +380,22 @@ class _ProfilePageState extends State<ProfilePage> {
                                       ),
                                     ),
                                   ),
+                                const SizedBox(height: 12),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxWidth: MediaQuery.of(context).size.width * 0.92,
+                                    ),
+                                    child: Card(
+                                      margin: const EdgeInsets.all(16),
+                                      color: Colors.transparent, // Mantém o fundo da timeline
+                                      elevation: 0, // Sem sombra extra
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                      child: const _YouthTimeline(),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -422,9 +462,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         if (aceito == true) {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => ExecutarDueloPage(
-                                duelId: _desafioPendente!['id'],
-                              ),
+                              builder: (_) => DueloQuizPage(duelId: _desafioPendente!['id']),
                             ),
                           );
                         }
@@ -627,6 +665,62 @@ class _ProfilePageState extends State<ProfilePage> {
                     }
                     return;
                   }
+                  // Verifica se já existe um confronto entre os dois usuários para o mesmo quiz
+                  final existing = await Supabase.instance.client
+                    .from('quiz_duels')
+                    .select()
+                    .or('and(challenger_id.eq.$userId,opponent_id.eq.$targetId),and(challenger_id.eq.$targetId,opponent_id.eq.$userId)')
+                    .eq('quiz_id', quizId)
+                    .inFilter('status', ['pendente', 'em_andamento', 'aceito']);
+                  if (existing != null && existing.isNotEmpty) {
+                    if (context.mounted) {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          backgroundColor: Colors.white,
+                          title: Row(
+                            children: const [
+                              Icon(Icons.warning_amber_rounded, color: Color(0xFFE94057), size: 32),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Desafio já existe',
+                                  style: TextStyle(
+                                    color: Color(0xFF2D2EFF),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 20,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          content: const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Text(
+                              'Já existe um desafio em andamento entre vocês! Aguarde o término do desafio atual para enviar outro.',
+                              style: TextStyle(fontSize: 16, color: Colors.black87),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                backgroundColor: Color(0xFF2D2EFF),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                                textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              ),
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return;
+                  }
                   // Cria o desafio
                   final response = await Supabase.instance.client.from('quiz_duels').insert({
                     'challenger_id': userId,
@@ -639,12 +733,54 @@ class _ProfilePageState extends State<ProfilePage> {
                   await Supabase.instance.client.from('notifications').insert({
                     'user_id': targetId,
                     'type': 'quiz_duel',
+                    'duel_id': response['id'],
                     'created_at': DateTime.now().toIso8601String(),
                     'read': false,
                   });
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Desafio enviado! Aguarde resposta.')),
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                        backgroundColor: Colors.white,
+                        title: Row(
+                          children: const [
+                            Icon(Icons.check_circle, color: Color(0xFF2D2EFF), size: 32),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Desafio enviado!',
+                                style: TextStyle(
+                                  color: Color(0xFF2D2EFF),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        content: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'O desafio foi enviado com sucesso! Aguarde a resposta do outro usuário.',
+                            style: TextStyle(fontSize: 16, color: Colors.black87),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.white,
+                              backgroundColor: Color(0xFF2D2EFF),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                              textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            child: const Text('OK'),
+                          ),
+                        ],
+                      ),
                     );
                   }
                 },
@@ -681,9 +817,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => ExecutarDueloPage(
-                          duelId: _desafioPendente!['id'],
-                        ),
+                        builder: (_) => DueloQuizPage(duelId: _desafioPendente!['id']),
                       ),
                     );
                   },
@@ -694,6 +828,65 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
       ],
     );
+  }
+
+  Future<void> showReflexaoDialog({Map<String, dynamic>? reflexao, int? ordem}) async {
+    final isEdit = reflexao != null;
+    final controller = TextEditingController(text: reflexao?['conteudo'] ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(isEdit ? 'Editar Reflexão' : 'Nova Reflexão'),
+          content: TextField(
+            controller: controller,
+            maxLength: 600,
+            maxLines: 5,
+            decoration: const InputDecoration(
+              hintText: 'Digite sua reflexão... (máx. 600 caracteres)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (controller.text.trim().isEmpty) return;
+                Navigator.pop(context, controller.text.trim());
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
+        );
+      },
+    );
+    if (result != null && result.isNotEmpty) {
+      await saveReflexao(result, ordem: ordem, id: reflexao?['id']);
+      await _fetchReflexoes();
+      if (mounted) setState(() {}); // força rebuild para atualizar timeline
+    }
+  }
+
+  Future<void> saveReflexao(String conteudo, {int? ordem, String? id}) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    if (id != null) {
+      // update
+      await Supabase.instance.client
+          .from('reflexoes')
+          .update({'conteudo': conteudo, 'ordem': ordem ?? 0})
+          .eq('id', id);
+    } else {
+      // insert
+      await Supabase.instance.client.from('reflexoes').insert({
+        'user_id': user.id,
+        'conteudo': conteudo,
+        'ordem': ordem ?? 0,
+      });
+    }
   }
 }
 
@@ -1746,6 +1939,8 @@ class _DuelCarouselState extends State<_DuelCarousel> {
     }
     final screenHeight = MediaQuery.of(context).size.height;
     final cardHeight = screenHeight * 0.38;
+    final double stackTopOffset = cardHeight / 2;
+    final double stackBottomOffset = cardHeight / 2;
     return SizedBox(
       height: cardHeight.clamp(240, 340),
       child: PageView.builder(
@@ -2314,6 +2509,377 @@ class _EmailDialogState extends State<EmailDialog> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _YouthTimeline extends StatefulWidget {
+  const _YouthTimeline();
+  @override
+  State<_YouthTimeline> createState() => _YouthTimelineState();
+}
+
+class _YouthTimelineState extends State<_YouthTimeline> {
+  bool _verMais = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.findAncestorStateOfType<_ProfilePageState>();
+    final reflexoes = state?._reflexoes ?? [];
+    final isOwnProfile = state?.profile != null && state?.profile!['id'] == state?.currentUserId;
+
+    final mostrarTodas = _verMais;
+    final int limite = 3;
+    final cardsToShow = isOwnProfile
+      ? (mostrarTodas ? reflexoes : reflexoes.take(limite).toList())
+      : (mostrarTodas ? reflexoes : reflexoes.take(limite).toList());
+
+    final int cardCount = cardsToShow.length;
+
+    // TRATAMENTO ROBUSTO: se não houver reflexões, não renderiza timeline
+    if (cardCount == 0) {
+      if (isOwnProfile) {
+        // Botão de adicionar reflexão para o próprio perfil
+        return Column(
+          children: [
+            const SizedBox(height: 32),
+            Center(
+              child: IconButton(
+                icon: const Icon(Icons.add_circle_outline, size: 64, color: Color(0xFF2D2EFF)),
+                tooltip: 'Adicionar reflexão',
+                onPressed: () {
+                  final state = context.findAncestorStateOfType<_ProfilePageState>();
+                  state?.showReflexaoDialog(ordem: 0);
+                },
+              ),
+            ),
+          ],
+        );
+      } else {
+        // Mensagem para outros perfis
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 32),
+          child: Center(
+            child: Text(
+              'Nenhuma reflexão ainda.',
+              style: const TextStyle(fontSize: 18, color: Colors.black54),
+            ),
+          ),
+        );
+      }
+    }
+
+    // Parâmetros visuais (mantenha os mesmos do layout anterior)
+    const double cardHeight = 210;
+    const double cardWidth = 304;
+    const double circleRadius = 16;
+    const double circleDiameter = circleRadius * 2;
+    const double circleSpacing = 60; // Aumente este valor para mais espaçamento, por exemplo 60 para 100
+    const double lineWidth = 8;
+    final double timelineHeight = (cardCount - 1) * (cardHeight + circleSpacing) + cardCount * circleDiameter;
+    final double timelineLeft = circleRadius * 2;
+    final double stackTopOffset = cardHeight / 2;
+    final double stackBottomOffset = cardHeight / 2;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: MediaQuery.of(context).size.width * 0.96,
+          height: timelineHeight + 40 + stackTopOffset + stackBottomOffset,
+          child: Stack(
+            children: [
+              // Linha vertical com gradiente e sombra
+              Positioned(
+                left: circleRadius,
+                top: stackTopOffset,
+                child: Container(
+                  width: lineWidth,
+                  height: timelineHeight,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xFF7B2FF2), // Roxo
+                        Color(0xFFFFA726), // Laranja
+                        Color(0xFFFFF176), // Amarelo
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Círculos vermelhos com borda branca e sombra
+              ...List.generate(cardCount, (i) {
+                final double top = stackTopOffset + i * (cardHeight + circleSpacing + circleDiameter);
+                return Positioned(
+                  left: circleRadius + (lineWidth / 2) - circleRadius,
+                  top: top,
+                  child: Container(
+                    width: circleDiameter,
+                    height: circleDiameter,
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 8,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+              // Cards cinza claro, fonte #333333, borda branca
+              ...List.generate(cardCount, (i) {
+                final double centerY = stackTopOffset + i * (cardHeight + circleSpacing + circleDiameter) + circleRadius;
+                final double top = centerY - cardHeight / 2;
+                final reflexao = cardsToShow[i];
+                return Positioned(
+                  top: top,
+                  left: timelineLeft,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Linha horizontal
+                      Container(
+                        width: 28,
+                        height: 4,
+                        color: Colors.red, // Azul claro
+                      ),
+                      const SizedBox(width: 8),
+                      // Card com fundo cinza claro, borda branca, fonte #333333
+                      Container(
+                        width: cardWidth,
+                        height: cardHeight,
+                        decoration: BoxDecoration(
+                          color: Color(0xFFF7F7F7), // Cinza bem claro
+                          borderRadius: BorderRadius.circular(22),
+                          border: Border.all(color: Colors.red, width: 1.2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 12,
+                              offset: Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Stack(
+                            children: [
+                              if (reflexao != null && reflexao['conteudo'] != null)
+                                Align(
+                                  alignment: Alignment.center,
+                                  child: SizedBox(
+                                    height: cardHeight - 32, // Limita a altura interna do card
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            reflexao['conteudo'].toString().length > 130
+                                              ? reflexao['conteudo'].toString().substring(0, 130) + '...'
+                                              : reflexao['conteudo'],
+                                            style: const TextStyle(
+                                              color: Color(0xFF333333), // Cinza escuro
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                            maxLines: 5,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (reflexao['conteudo'].toString().length > 130) ...[
+                                            const SizedBox(height: 16),
+                                            SizedBox(
+                                              height: 32,
+                                              child: TextButton(
+                                                onPressed: () {
+                                                  showDialog(
+                                                    context: context,
+                                                    builder: (_) => Dialog(
+                                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                                      backgroundColor: Colors.transparent,
+                                                      child: Container(
+                                                        constraints: const BoxConstraints(maxWidth: 380),
+                                                        decoration: BoxDecoration(
+                                                          gradient: const LinearGradient(
+                                                            colors: [
+                                                              Color(0xFF6A85F1),
+                                                              Color(0xFFFBC2EB),
+                                                              Color(0xFFF9F586),
+                                                              Color(0xFFF68084),
+                                                            ],
+                                                            begin: Alignment.topLeft,
+                                                            end: Alignment.bottomRight,
+                                                          ),
+                                                          borderRadius: BorderRadius.circular(28),
+                                                          boxShadow: [
+                                                            BoxShadow(
+                                                              color: Colors.black26,
+                                                              blurRadius: 24,
+                                                              offset: Offset(0, 8),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                                                        child: Column(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            const Icon(Icons.menu_book, color: Colors.white, size: 48),
+                                                            const SizedBox(height: 12),
+                                                            const Text(
+                                                              'Reflexão Completa',
+                                                              style: TextStyle(
+                                                                color: Colors.white,
+                                                                fontWeight: FontWeight.bold,
+                                                                fontSize: 22,
+                                                                letterSpacing: 0.5,
+                                                              ),
+                                                              textAlign: TextAlign.center,
+                                                            ),
+                                                            const SizedBox(height: 18),
+                                                            Container(
+                                                              padding: const EdgeInsets.all(18),
+                                                              decoration: BoxDecoration(
+                                                                color: Colors.white.withOpacity(0.97),
+                                                                borderRadius: BorderRadius.circular(18),
+                                                              ),
+                                                              child: SingleChildScrollView(
+                                                                child: Text(
+                                                                  reflexao['conteudo'],
+                                                                  style: const TextStyle(
+                                                                    fontSize: 18,
+                                                                    color: Color(0xFF2D2EFF),
+                                                                    fontWeight: FontWeight.w500,
+                                                                  ),
+                                                                  textAlign: TextAlign.center,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                            const SizedBox(height: 24),
+                                                            SizedBox(
+                                                              width: double.infinity,
+                                                              child: ElevatedButton.icon(
+                                                                icon: const Icon(Icons.close, color: Colors.white),
+                                                                label: const Text('Fechar', style: TextStyle(fontWeight: FontWeight.bold)),
+                                                                style: ElevatedButton.styleFrom(
+                                                                  backgroundColor: const Color(0xFF7B2FF2),
+                                                                  foregroundColor: Colors.white,
+                                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                                                  textStyle: const TextStyle(fontSize: 16),
+                                                                ),
+                                                                onPressed: () => Navigator.of(context).pop(),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                                child: const Text('Leia Mais', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                                style: TextButton.styleFrom(
+                                                  backgroundColor: Colors.red,
+                                                  minimumSize: Size(80, 32), // altura menor
+                                                  padding: EdgeInsets.symmetric(horizontal: 18, vertical: 0),
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              // Ícone de editar
+                              Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: Builder(
+                                  builder: (context) {
+                                    if (isOwnProfile) {
+                                      return IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.black, size: 28),
+                                        tooltip: 'Editar reflexão',
+                                        onPressed: () {
+                                          final state = context.findAncestorStateOfType<_ProfilePageState>();
+                                          state?.showReflexaoDialog(reflexao: reflexao, ordem: i);
+                                        },
+                                      );
+                                    } else {
+                                      // Visitante: curtir/gostar e compartilhar
+                                      return Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.thumb_up_alt_outlined, color: Colors.white, size: 26),
+                                            tooltip: 'Curtir',
+                                            onPressed: () {},
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.share, color: Colors.white, size: 26),
+                                            tooltip: 'Compartilhar',
+                                            onPressed: () {},
+                                          ),
+                                        ],
+                                      );
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+        // Botão "Carregar Mais" (para ambos, se houver mais de 3 reflexões)
+        if (reflexoes.length > limite)
+          Padding(
+            padding: const EdgeInsets.only(top: 18, bottom: 8),
+            child: Center(
+              child: TextButton(
+                onPressed: () => setState(() => _verMais = !_verMais),
+                child: Text(_verMais ? 'Mostrar Menos' : 'Carregar Mais', style: const TextStyle(fontSize: 16)),
+              ),
+            ),
+          ),
+        // Botão + grande centralizado para adicionar nova reflexão (apenas para o próprio perfil)
+        if (isOwnProfile)
+          Padding(
+            padding: const EdgeInsets.only(top: 24, bottom: 8),
+            child: Center(
+              child: IconButton(
+                icon: const Icon(Icons.add_circle_outline, size: 54, color: Color(0xFF2D2EFF)),
+                tooltip: 'Adicionar nova reflexão',
+                onPressed: () {
+                  final state = context.findAncestorStateOfType<_ProfilePageState>();
+                  state?.showReflexaoDialog(ordem: reflexoes.length);
+                },
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

@@ -53,11 +53,14 @@ class _ExecutarDueloPageState extends State<ExecutarDueloPage> {
       final response = await _supabase
           .from('quiz_questions')
           .select()
-          .order('random()')
           .limit(10);
 
+      // Embaralha as perguntas no lado do app
+      final perguntasList = List<Map<String, dynamic>>.from(response);
+      perguntasList.shuffle();
+
       setState(() {
-        _perguntas = List<Map<String, dynamic>>.from(response);
+        _perguntas = perguntasList;
         _carregando = false;
       });
     } catch (e) {
@@ -242,8 +245,8 @@ class _ExecutarDueloPageState extends State<ExecutarDueloPage> {
 
     final pergunta = _perguntas[_perguntaAtual];
     final respostas = [
-      pergunta['correct_answer'],
-      ...List<String>.from(pergunta['wrong_answers']),
+      (pergunta['correct_answer'] ?? ''),
+      ...List<String>.from(pergunta['wrong_answers'] ?? []),
     ]..shuffle();
 
     return Scaffold(
@@ -262,13 +265,13 @@ class _ExecutarDueloPageState extends State<ExecutarDueloPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      pergunta['question'],
+                      pergunta['question'] ?? '',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: 16),
                     ...respostas.map((resposta) {
                       final isSelected = _respostaSelecionada == resposta;
-                      final isCorrect = resposta == pergunta['correct_answer'];
+                      final isCorrect = resposta == (pergunta['correct_answer'] ?? '');
                       Color? backgroundColor;
                       if (_respondido) {
                         if (isCorrect) {
@@ -293,7 +296,7 @@ class _ExecutarDueloPageState extends State<ExecutarDueloPage> {
                             ),
                             child: Row(
                               children: [
-                                Expanded(child: Text(resposta)),
+                                Expanded(child: Text(resposta ?? '')),
                                 if (_respondido && isCorrect)
                                   const Icon(Icons.check_circle, color: Colors.green),
                                 if (_respondido && isSelected && !isCorrect)

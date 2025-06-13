@@ -20,6 +20,8 @@ import 'features/admin/vocacional/aprovados_projeto_page.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: 'assets/env.txt');
+  print('URL: [32m[1m[4m[7m' + (dotenv.env['SUPABASE_URL'] ?? 'NULO') + '\u001b[0m');
+  print('KEY: [32m[1m[4m[7m' + (dotenv.env['SUPABASE_ANON_KEY'] ?? 'NULO') + '\u001b[0m');
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,

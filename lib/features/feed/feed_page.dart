@@ -529,41 +529,52 @@ class _StoriesBarState extends State<_StoriesBar> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                 child: Column(
                   children: [
-                    Container(
-                      width: 68,
-                      height: 68,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(10),
-                        gradient: const LinearGradient(
-                          colors: [
-                            Color(0xFF9C27B0), // vermelho
-                            Color(0xFF7B2FF2), // roxo
-                            Color(0xFFE040FB), // azul
-                          ],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(3.0),
-                        child: ClipRRect(
+                    GestureDetector(
+                      onTap: () {
+                        if (user['id'] != null) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ProfilePage(profileId: user['id']),
+                            ),
+                          );
+                        }
+                      },
+                      child: Container(
+                        width: 68,
+                        height: 68,
+                        decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            width: 62,
-                            height: 62,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.rectangle,
-                              color: Colors.white,
-                              image: user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty
-                                  ? DecorationImage(
-                                      image: NetworkImage(user['avatar_url']),
-                                      fit: BoxFit.cover,
-                                    )
+                          gradient: const LinearGradient(
+                            colors: [
+                              Color(0xFF9C27B0), // vermelho
+                              Color(0xFF7B2FF2), // roxo
+                              Color(0xFFE040FB), // azul
+                            ],
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(3.0),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              width: 62,
+                              height: 62,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.rectangle,
+                                color: Colors.white,
+                                image: user['avatar_url'] != null && user['avatar_url'].toString().isNotEmpty
+                                    ? DecorationImage(
+                                        image: NetworkImage(user['avatar_url']),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: (user['avatar_url'] == null || user['avatar_url'].toString().isEmpty)
+                                  ? const Icon(Icons.person, size: 30)
                                   : null,
                             ),
-                            child: (user['avatar_url'] == null || user['avatar_url'].toString().isEmpty)
-                                ? const Icon(Icons.person, size: 30)
-                                : null,
                           ),
                         ),
                       ),
@@ -571,12 +582,23 @@ class _StoriesBarState extends State<_StoriesBar> {
                     const SizedBox(height: 6),
                     SizedBox(
                       width: 70,
-                      child: Text(
-                        user['username'] ?? '',
-                        style: const TextStyle(fontSize: 13),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                        textAlign: TextAlign.center,
+                      child: GestureDetector(
+                        onTap: () {
+                          if (user['id'] != null) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ProfilePage(profileId: user['id']),
+                              ),
+                            );
+                          }
+                        },
+                        child: Text(
+                          user['username'] ?? '',
+                          style: const TextStyle(fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     ),
                   ],

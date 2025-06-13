@@ -22,6 +22,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _login() async {
+    print('DEBUG: Iniciando login com email: ' + _emailController.text.trim());
     setState(() {
       _loading = true;
       _error = null;
@@ -31,23 +32,30 @@ class _LoginPageState extends State<LoginPage> {
         email: _emailController.text.trim(),
         password: _senhaController.text,
       );
+      print('DEBUG: Resposta do Supabase: ' + response.toString());
+      print('DEBUG: Usuário retornado: ' + (response.user?.id ?? 'null'));
       if (response.user != null) {
         if (mounted) {
+          print('DEBUG: Login bem-sucedido, navegando para /feed');
           Navigator.of(context).pushNamedAndRemoveUntil('/feed', (route) => false);
         }
       } else {
+        print('DEBUG: Email ou senha inválidos.');
         setState(() {
           _error = 'Email ou senha inválidos.';
         });
       }
-    } catch (e) {
+    } catch (e, stack) {
+      print('DEBUG: Erro ao fazer login: ' + e.toString());
+      print('DEBUG: Stacktrace: ' + stack.toString());
       setState(() {
-        _error = 'Erro ao fazer login: ${e.toString()}';
+        _error = 'Erro ao fazer login: [31m' + e.toString();
       });
     } finally {
       setState(() {
         _loading = false;
       });
+      print('DEBUG: Finalizou tentativa de login.');
     }
   }
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:math';
+import 'dart:async';
 
 // Tela principal do Bible Quiz
 // Inspirada no layout fornecido pelo usuário
@@ -33,6 +35,10 @@ class _BibleQuizPageState extends State<BibleQuizPage>
   bool loading = true;
   List<Map<String, dynamic>> questions = [];
   String? quizId; // Pode ser passado por parâmetro futuramente
+
+  int countdownKey = 0;
+  bool timeoutActive = false;
+  bool quizFinished = false;
 
   @override
   void initState() {
@@ -291,6 +297,53 @@ class _BibleQuizPageState extends State<BibleQuizPage>
     });
   }
 
+  void _nextQuestionTimeout() async {
+    if (timeoutActive) return;
+    if (quizFinished || currentQuestion >= questions.length) return;
+    timeoutActive = true;
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    final question = questions[currentQuestion];
+    final questionId = question['id'];
+    // Verifica se já respondeu
+    PostgrestFilterBuilder existingQuery = Supabase.instance.client
+        .from('quiz_answers')
+        .select()
+        .eq('user_id', user.id)
+        .eq('question_id', questionId);
+    if (widget.duelId != null) {
+      existingQuery = existingQuery.eq('duel_id', widget.duelId!);
+    }
+    final existing = await existingQuery.limit(1).maybeSingle();
+    if (existing == null) {
+      final answerData = {
+        'user_id': user.id,
+        'question_id': questionId,
+        'option_id': null, // Não respondeu
+        'answered_at': DateTime.now().toIso8601String(),
+      };
+      if (widget.duelId != null) {
+        answerData['duel_id'] = widget.duelId;
+      }
+      await Supabase.instance.client.from('quiz_answers').insert(answerData);
+    }
+    setState(() {
+      showResult = true;
+      isCorrect = false;
+      progress = (currentQuestion + 1) / questions.length;
+    });
+    await Future.delayed(const Duration(seconds: 1));
+    setState(() {
+      showResult = false;
+      if (currentQuestion < questions.length - 1) {
+        currentQuestion++;
+      } else {
+        quizFinished = true;
+      }
+      timeoutActive = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (loading) {
@@ -299,8 +352,56 @@ class _BibleQuizPageState extends State<BibleQuizPage>
       );
     }
     if (questions.isEmpty) {
-      return const Scaffold(
-        body: Center(child: Text('Nenhuma questão disponível para este quiz.')),
+      return Scaffold(
+        body: Stack(
+          children: [
+            // Fundo gradiente animado
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 800),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF2D2EFF), // Azul vibrante
+                    Color(0xFF7B2FF2), // Roxo
+                    Color(0xFFE94057), // Vermelho/rosa
+                  ],
+                ),
+              ),
+            ),
+            // Botão de voltar sobreposto
+            Positioned(
+              top: 16,
+              left: 8,
+              child: SafeArea(
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white, size: 32),
+                  onPressed: () => Navigator.of(context).pop(),
+                  tooltip: 'Voltar',
+                ),
+              ),
+            ),
+            // Mensagem central
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.info_outline, color: Colors.white, size: 48),
+                    SizedBox(height: 24),
+                    Text(
+                      'Nenhuma questão disponível para este quiz.',
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       );
     }
     final question = questions[currentQuestion];
@@ -513,6 +614,19 @@ class _BibleQuizPageState extends State<BibleQuizPage>
                 ),
               ),
             ),
+          if (!loading && !showResult && questions.isNotEmpty && !quizFinished && currentQuestion < questions.length)
+            Positioned(
+              top: 90,
+              right: 24,
+              child: _CountdownCircle(
+                key: ValueKey('$currentQuestion-$countdownKey'),
+                seconds: 12,
+                onTimeout: () {
+                  _nextQuestionTimeout();
+                  setState(() => countdownKey++);
+                },
+              ),
+            ),
         ],
       ),
     );
@@ -569,5 +683,144 @@ class CustomProgressBar extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+class _CountdownCircle extends StatefulWidget {
+  final int seconds;
+  final VoidCallback onTimeout;
+  const _CountdownCircle({Key? key, required this.seconds, required this.onTimeout}) : super(key: key);
+
+  @override
+  State<_CountdownCircle> createState() => _CountdownCircleState();
+}
+
+class _CountdownCircleState extends State<_CountdownCircle> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late int _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.seconds;
+    _controller = AnimationController(
+      vsync: this,
+      duration: Duration(seconds: widget.seconds),
+    )..addListener(() {
+        final t = (widget.seconds - (_controller.value * widget.seconds)).ceil();
+        if (t != _current && mounted) {
+          setState(() => _current = t);
+        }
+      })
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed) {
+          widget.onTimeout();
+        }
+      });
+    _controller.forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CountdownCircle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.seconds != widget.seconds) {
+      _controller.dispose();
+      _controller = AnimationController(
+        vsync: this,
+        duration: Duration(seconds: widget.seconds),
+      )..addListener(() {
+          final t = (widget.seconds - (_controller.value * widget.seconds)).ceil();
+          if (t != _current && mounted) {
+            setState(() => _current = t);
+          }
+        })
+        ..addStatusListener((status) {
+          if (status == AnimationStatus.completed) {
+            widget.onTimeout();
+          }
+        });
+      _controller.forward(from: 0);
+      setState(() => _current = widget.seconds);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 70,
+      height: 70,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CustomPaint(
+            size: const Size(70, 70),
+            painter: _CircleCountdownPainter(
+              progress: 1 - _controller.value,
+            ),
+          ),
+          Text(
+            _current.toString(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CircleCountdownPainter extends CustomPainter {
+  final double progress;
+  _CircleCountdownPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final startAngle = -pi / 2;
+    final sweepAngle = 2 * pi * progress;
+    final bgPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 7;
+    final fgPaint = Paint()
+      ..shader = SweepGradient(
+        colors: [Colors.cyanAccent, Colors.greenAccent, Colors.blueAccent],
+        startAngle: 0,
+        endAngle: 2 * pi,
+      ).createShader(rect)
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 7;
+    // Fundo
+    canvas.drawArc(
+      Rect.fromCircle(center: size.center(Offset.zero), radius: size.width / 2 - 4),
+      0,
+      2 * pi,
+      false,
+      bgPaint,
+    );
+    // Progresso
+    canvas.drawArc(
+      Rect.fromCircle(center: size.center(Offset.zero), radius: size.width / 2 - 4),
+      startAngle,
+      sweepAngle,
+      false,
+      fgPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CircleCountdownPainter oldDelegate) {
+    return oldDelegate.progress != progress;
   }
 } 
