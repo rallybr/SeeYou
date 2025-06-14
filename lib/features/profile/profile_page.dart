@@ -315,66 +315,80 @@ class _ProfilePageState extends State<ProfilePage> {
                                         maxWidth: MediaQuery.of(context).size.width * 0.92,
                                       ),
                                       child: Card(
-                                        margin: const EdgeInsets.all(16),
-                                        color: Colors.deepPurple[50],
+                                        color: Colors.transparent,
                                         elevation: 6,
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(28),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                crossAxisAlignment: CrossAxisAlignment.center,
-                                                children: [
-                                                  if (_vocacionalAprovado!['vocational_projects']?['logo_url'] != null &&
-                                                      (_vocacionalAprovado!['vocational_projects']?['logo_url'] as String).isNotEmpty)
-                                                    CircleAvatar(
-                                                      radius: 28,
-                                                      backgroundImage: NetworkImage(_vocacionalAprovado!['vocational_projects']['logo_url']),
-                                                      backgroundColor: Colors.white,
-                                                    ),
-                                                  const SizedBox(width: 16),
-                                                  Expanded(
-                                                    child: Column(
-                                                      mainAxisAlignment: MainAxisAlignment.center,
-                                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                                      children: [
-                                                        Row(
-                                                          mainAxisAlignment: MainAxisAlignment.center,
-                                                          children: [
-                                                            const Text(
-                                                              'Me Identifiquei',
-                                                              style: TextStyle(
-                                                                fontWeight: FontWeight.bold,
-                                                                fontSize: 22,
-                                                                color: Colors.deepPurple,
-                                                              ),
-                                                              textAlign: TextAlign.center,
-                                                            ),                                                            
-                                                          ],
-                                                        ),
-                                                        const SizedBox(height: 8),
-                                                        Text(
-                                                          _vocacionalAprovado!['vocational_projects']?['nome'] ?? '',
-                                                          style: const TextStyle(
-                                                            fontWeight: FontWeight.bold,
-                                                            fontSize: 16,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            gradient: const LinearGradient(
+                                              colors: [
+                                                Color(0xFF6A85F1),
+                                                Color(0xFFFBC2EB),
+                                                Color(0xFFF9F586),
+                                                Color(0xFFF68084),
+                                              ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                            ),
+                                            borderRadius: BorderRadius.circular(18),
+                                          ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(28),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Row(
+                                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                                  children: [
+                                                    if (_vocacionalAprovado!['vocational_projects']?['logo_url'] != null &&
+                                                        (_vocacionalAprovado!['vocational_projects']?['logo_url'] as String).isNotEmpty)
+                                                      CircleAvatar(
+                                                        radius: 28,
+                                                        backgroundImage: NetworkImage(_vocacionalAprovado!['vocational_projects']['logo_url']),
+                                                        backgroundColor: Colors.white,
+                                                      ),
+                                                    const SizedBox(width: 16),
+                                                    Expanded(
+                                                      child: Column(
+                                                        mainAxisAlignment: MainAxisAlignment.center,
+                                                        crossAxisAlignment: CrossAxisAlignment.center,
+                                                        children: [
+                                                          Row(
+                                                            mainAxisAlignment: MainAxisAlignment.center,
+                                                            children: [
+                                                              const Text(
+                                                                'Me Identifiquei',
+                                                                style: TextStyle(
+                                                                  fontWeight: FontWeight.bold,
+                                                                  fontSize: 22,
+                                                                  color: Colors.deepPurple,
+                                                                ),
+                                                                textAlign: TextAlign.center,
+                                                              ),                                                             
+                                                            ],
                                                           ),
-                                                          textAlign: TextAlign.center,
-                                                        ),
-                                                      ],
+                                                          const SizedBox(height: 8),
+                                                          Text(
+                                                            _vocacionalAprovado!['vocational_projects']?['nome'] ?? '',
+                                                            style: const TextStyle(
+                                                              fontWeight: FontWeight.bold,
+                                                              fontSize: 16,
+                                                            ),
+                                                            textAlign: TextAlign.center,
+                                                          ),
+                                                        ],
+                                                      ),
                                                     ),
-                                                  ),
-                                                  const SizedBox(width: 16),
-                                                  SizedBox(
-                                                    width: 70,
-                                                    height: 70,
-                                                    child: Lottie.asset('assets/animations/happy_emoji.json', repeat: true),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
+                                                    const SizedBox(width: 16),
+                                                    SizedBox(
+                                                      width: 70,
+                                                      height: 70,
+                                                      child: Lottie.asset('assets/animations/happy_emoji.json', repeat: true),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -392,7 +406,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                       color: Colors.transparent, // Mantém o fundo da timeline
                                       elevation: 0, // Sem sombra extra
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                                      child: const _YouthTimeline(),
+                                      child: _YouthTimeline(),
                                     ),
                                   ),
                                 ),
@@ -836,30 +850,96 @@ class _ProfilePageState extends State<ProfilePage> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text(isEdit ? 'Editar Reflexão' : 'Nova Reflexão'),
-          content: TextField(
-            controller: controller,
-            maxLength: 600,
-            maxLines: 5,
-            decoration: const InputDecoration(
-              hintText: 'Digite sua reflexão... (máx. 600 caracteres)',
-              border: OutlineInputBorder(),
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          backgroundColor: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 380),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF6A85F1),
+                  Color(0xFFFBC2EB),
+                  Color(0xFFF9F586),
+                  Color(0xFFF68084),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 24,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.edit, color: Colors.black, size: 48),
+                const SizedBox(height: 12),
+                Text(
+                  isEdit ? 'Editar Reflexão' : 'Nova Reflexão',
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 22,
+                    letterSpacing: 0.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.97),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: TextField(
+                    controller: controller,
+                    maxLength: 600,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                      hintText: 'Digite sua reflexão... (máx. 600 caracteres)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancelar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (controller.text.trim().isEmpty) return;
+                        Navigator.pop(context, controller.text.trim());
+                      },
+                      child: const Text('Salvar', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF7B2FF2),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (controller.text.trim().isEmpty) return;
-                Navigator.pop(context, controller.text.trim());
-              },
-              child: const Text('Salvar'),
-            ),
-          ],
         );
       },
     );
@@ -1994,142 +2074,186 @@ class _DuelCardView extends StatelessWidget {
       margin: const EdgeInsets.all(16),
       elevation: 6,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                // Challenger
-                Expanded(
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        backgroundImage: challenger['avatar_url'] != null ? NetworkImage(challenger['avatar_url']) : null,
-                        radius: 28,
-                        child: challenger['avatar_url'] == null ? Icon(Icons.person, size: 32) : null,
-                      ),
-                      const SizedBox(height: 6),
-                      Text('@${challenger['username'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 2),
-                      ClipRRect(
-                        borderRadius: BorderRadius.all(barRadius),
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween<double>(begin: 0, end: challengerProgress),
-                          duration: const Duration(milliseconds: 800),
-                          curve: Curves.easeInOut,
-                          builder: (context, value, child) => Container(
-                            height: barHeight,
-                            width: double.infinity,
-                            color: Colors.grey[300],
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: FractionallySizedBox(
-                                widthFactor: value,
-                                child: Container(
-                                  height: barHeight,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.deepPurple,
-                                    borderRadius: BorderRadius.all(barRadius),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF6A85F1),
+              Color(0xFFFBC2EB),
+              Color(0xFFF9F586),
+              Color(0xFFF68084),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // Challenger
+                  Expanded(
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          backgroundImage: challenger['avatar_url'] != null ? NetworkImage(challenger['avatar_url']) : null,
+                          radius: 28,
+                          child: challenger['avatar_url'] == null ? Icon(Icons.person, size: 32) : null,
+                        ),
+                        const SizedBox(height: 6),
+                        Text('@${challenger['username'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 2),
+                        ClipRRect(
+                          borderRadius: BorderRadius.all(barRadius),
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween<double>(begin: 0, end: challengerProgress),
+                            duration: const Duration(milliseconds: 800),
+                            curve: Curves.easeInOut,
+                            builder: (context, value, child) => Container(
+                              height: barHeight,
+                              width: double.infinity,
+                              color: Colors.grey[300],
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: FractionallySizedBox(
+                                  widthFactor: value,
+                                  child: Container(
+                                    height: barHeight,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.deepPurple,
+                                      borderRadius: BorderRadius.all(barRadius),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('${challengerScore} de $totalQ', style: const TextStyle(fontSize: 13)),
-                      const SizedBox(height: 2),
-                      Text('Pontuação', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-                      Text('$challengerScore pontos', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 18),
-                Icon(Icons.menu_book, size: 38, color: Colors.black87),
-                const SizedBox(width: 18),
-                // Opponent
-                Expanded(
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        backgroundImage: opponent['avatar_url'] != null ? NetworkImage(opponent['avatar_url']) : null,
-                        radius: 28,
-                        child: opponent['avatar_url'] == null ? Icon(Icons.person, size: 32) : null,
-                      ),
-                      const SizedBox(height: 6),
-                      Text('@${opponent['username'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 2),
-                      ClipRRect(
-                        borderRadius: BorderRadius.all(barRadius),
-                        child: TweenAnimationBuilder<double>(
-                          tween: Tween<double>(begin: 0, end: opponentProgress),
-                          duration: const Duration(milliseconds: 800),
-                          curve: Curves.easeInOut,
-                          builder: (context, value, child) => Container(
-                            height: barHeight,
-                            width: double.infinity,
-                            color: Colors.grey[300],
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: FractionallySizedBox(
-                                widthFactor: value,
-                                child: Container(
-                                  height: barHeight,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.deepPurple,
-                                    borderRadius: BorderRadius.all(barRadius),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text('${opponentScore} de $totalQ', style: const TextStyle(fontSize: 13)),
-                      const SizedBox(height: 2),
-                      Text('Pontuação', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
-                      Text('$opponentScore pontos', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              challengerScore > opponentScore
-                  ? '@${challenger['username']} está vencendo!'
-                  : opponentScore > challengerScore
-                      ? '@${opponent['username']} está vencendo!'
-                      : 'Empate!',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                final duelId = duel['id'];
-                if (duelId != null) {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => DueloQuizPage(duelId: duelId),
+                        const SizedBox(height: 4),
+                        Text('${challengerScore} de $totalQ', style: const TextStyle(fontSize: 13)),
+                        const SizedBox(height: 2),
+                        Text('Pontuação', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                        Text('$challengerScore pontos', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      ],
                     ),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(width: 18),
+                  Icon(Icons.menu_book, size: 38, color: Colors.black87),
+                  const SizedBox(width: 18),
+                  // Opponent
+                  Expanded(
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          backgroundImage: opponent['avatar_url'] != null ? NetworkImage(opponent['avatar_url']) : null,
+                          radius: 28,
+                          child: opponent['avatar_url'] == null ? Icon(Icons.person, size: 32) : null,
+                        ),
+                        const SizedBox(height: 6),
+                        Text('@${opponent['username'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 2),
+                        ClipRRect(
+                          borderRadius: BorderRadius.all(barRadius),
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween<double>(begin: 0, end: opponentProgress),
+                            duration: const Duration(milliseconds: 800),
+                            curve: Curves.easeInOut,
+                            builder: (context, value, child) => Container(
+                              height: barHeight,
+                              width: double.infinity,
+                              color: Colors.grey[300],
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: FractionallySizedBox(
+                                  widthFactor: value,
+                                  child: Container(
+                                    height: barHeight,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.deepPurple,
+                                      borderRadius: BorderRadius.all(barRadius),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text('${opponentScore} de $totalQ', style: const TextStyle(fontSize: 13)),
+                        const SizedBox(height: 2),
+                        Text('Pontuação', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                        Text('$opponentScore pontos', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              child: const Text('Continuar Quiz'),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Text(
+                challengerScore > opponentScore
+                    ? '@${challenger['username']} está vencendo!'
+                    : opponentScore > challengerScore
+                        ? '@${opponent['username']} está vencendo!'
+                        : 'Empate!',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFF2D2EFF),
+                      Color(0xFF7B2FF2),
+                      Color(0xFFE94057),
+                    ],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(25),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 4,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(25),
+                    onTap: () {
+                      final duelId = duel['id'];
+                      if (duelId != null) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DueloQuizPage(duelId: duelId),
+                          ),
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                      alignment: Alignment.center,
+                      child: const Text(
+                        'Continuar Quiz',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2627,7 +2751,7 @@ class _YouthTimelineState extends State<_YouthTimeline> {
                     width: circleDiameter,
                     height: circleDiameter,
                     decoration: BoxDecoration(
-                      color: Colors.red,
+                      color: Colors.purple,
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 3),
                       boxShadow: [
@@ -2656,18 +2780,18 @@ class _YouthTimelineState extends State<_YouthTimeline> {
                       Container(
                         width: 28,
                         height: 4,
-                        color: Colors.red, // Azul claro
+                        color: Colors.purple, // Azul claro
                       ),
                       const SizedBox(width: 8),
-                      // Card com fundo cinza claro, borda branca, fonte #333333
+                      // Card com borda branca sólida
                       Container(
                         width: cardWidth,
                         height: cardHeight,
                         decoration: BoxDecoration(
-                          color: Color(0xFFF7F7F7), // Cinza bem claro
+                          color: const Color(0xFFE8EAF6),
                           borderRadius: BorderRadius.circular(22),
-                          border: Border.all(color: Colors.red, width: 1.2),
-                          boxShadow: [
+                          border: Border.all(color: Colors.purple, width: 1.9),
+                          boxShadow: const [
                             BoxShadow(
                               color: Colors.black12,
                               blurRadius: 12,
@@ -2683,17 +2807,17 @@ class _YouthTimelineState extends State<_YouthTimeline> {
                                 Align(
                                   alignment: Alignment.center,
                                   child: SizedBox(
-                                    height: cardHeight - 32, // Limita a altura interna do card
+                                    height: cardHeight - 32,
                                     child: SingleChildScrollView(
                                       child: Column(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Text(
                                             reflexao['conteudo'].toString().length > 130
-                                              ? reflexao['conteudo'].toString().substring(0, 130) + '...'
-                                              : reflexao['conteudo'],
+                                                ? reflexao['conteudo'].toString().substring(0, 130) + '...'
+                                                : reflexao['conteudo'],
                                             style: const TextStyle(
-                                              color: Color(0xFF333333), // Cinza escuro
+                                              color: Color(0xFF333333),
                                               fontSize: 18,
                                               fontWeight: FontWeight.w500,
                                             ),
@@ -2701,10 +2825,9 @@ class _YouthTimelineState extends State<_YouthTimeline> {
                                             maxLines: 5,
                                             overflow: TextOverflow.ellipsis,
                                           ),
-                                          if (reflexao['conteudo'].toString().length > 130) ...[
-                                            const SizedBox(height: 16),
-                                            SizedBox(
-                                              height: 32,
+                                          if (reflexao['conteudo'].toString().length > 130)
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 16),
                                               child: TextButton(
                                                 onPressed: () {
                                                   showDialog(
@@ -2726,7 +2849,7 @@ class _YouthTimelineState extends State<_YouthTimeline> {
                                                             end: Alignment.bottomRight,
                                                           ),
                                                           borderRadius: BorderRadius.circular(28),
-                                                          boxShadow: [
+                                                          boxShadow: const [
                                                             BoxShadow(
                                                               color: Colors.black26,
                                                               blurRadius: 24,
@@ -2738,12 +2861,12 @@ class _YouthTimelineState extends State<_YouthTimeline> {
                                                         child: Column(
                                                           mainAxisSize: MainAxisSize.min,
                                                           children: [
-                                                            const Icon(Icons.menu_book, color: Colors.white, size: 48),
+                                                            const Icon(Icons.menu_book, color: Colors.black, size: 48),
                                                             const SizedBox(height: 12),
                                                             const Text(
                                                               'Reflexão Completa',
                                                               style: TextStyle(
-                                                                color: Colors.white,
+                                                                color: Colors.black,
                                                                 fontWeight: FontWeight.bold,
                                                                 fontSize: 22,
                                                                 letterSpacing: 0.5,
@@ -2754,7 +2877,7 @@ class _YouthTimelineState extends State<_YouthTimeline> {
                                                             Container(
                                                               padding: const EdgeInsets.all(18),
                                                               decoration: BoxDecoration(
-                                                                color: Colors.white.withOpacity(0.97),
+                                                                color: Colors.white,
                                                                 borderRadius: BorderRadius.circular(18),
                                                               ),
                                                               child: SingleChildScrollView(
@@ -2773,11 +2896,11 @@ class _YouthTimelineState extends State<_YouthTimeline> {
                                                             SizedBox(
                                                               width: double.infinity,
                                                               child: ElevatedButton.icon(
-                                                                icon: const Icon(Icons.close, color: Colors.white),
+                                                                icon: const Icon(Icons.close, color: Colors.black),
                                                                 label: const Text('Fechar', style: TextStyle(fontWeight: FontWeight.bold)),
                                                                 style: ElevatedButton.styleFrom(
-                                                                  backgroundColor: const Color(0xFF7B2FF2),
-                                                                  foregroundColor: Colors.white,
+                                                                  backgroundColor: Colors.white,
+                                                                  foregroundColor: Colors.black,
                                                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                                                   textStyle: const TextStyle(fontSize: 16),
@@ -2791,16 +2914,16 @@ class _YouthTimelineState extends State<_YouthTimeline> {
                                                     ),
                                                   );
                                                 },
-                                                child: const Text('Leia Mais', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                                child: const Text('Leia Mais', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold)),
                                                 style: TextButton.styleFrom(
-                                                  backgroundColor: Colors.red,
-                                                  minimumSize: Size(80, 32), // altura menor
-                                                  padding: EdgeInsets.symmetric(horizontal: 18, vertical: 0),
+                                                  backgroundColor: Colors.transparent,
+                                                  minimumSize: const Size(80, 32),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 0),
                                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                  shadowColor: Colors.transparent,
                                                 ),
                                               ),
                                             ),
-                                          ],
                                         ],
                                       ),
                                     ),
@@ -2822,17 +2945,16 @@ class _YouthTimelineState extends State<_YouthTimeline> {
                                         },
                                       );
                                     } else {
-                                      // Visitante: curtir/gostar e compartilhar
                                       return Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           IconButton(
-                                            icon: const Icon(Icons.thumb_up_alt_outlined, color: Colors.white, size: 26),
+                                            icon: const Icon(Icons.thumb_up_alt_outlined, color: Colors.black, size: 26),
                                             tooltip: 'Curtir',
                                             onPressed: () {},
                                           ),
                                           IconButton(
-                                            icon: const Icon(Icons.share, color: Colors.white, size: 26),
+                                            icon: const Icon(Icons.share, color: Colors.black, size: 26),
                                             tooltip: 'Compartilhar',
                                             onPressed: () {},
                                           ),

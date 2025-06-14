@@ -3,6 +3,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:math';
 import 'dart:async';
+import 'package:seeyou/features/quiz/quiz_service.dart';
 
 // Tela principal do Bible Quiz
 // Inspirada no layout fornecido pelo usuário
@@ -18,7 +19,8 @@ import 'dart:async';
 class BibleQuizPage extends StatefulWidget {
   final String? quizId;
   final String? duelId;
-  const BibleQuizPage({Key? key, this.quizId, this.duelId}) : super(key: key);
+  final QuizService? quizService;
+  const BibleQuizPage({Key? key, this.quizId, this.duelId, this.quizService}) : super(key: key);
 
   @override
   State<BibleQuizPage> createState() => _BibleQuizPageState();
@@ -26,6 +28,7 @@ class BibleQuizPage extends StatefulWidget {
 
 class _BibleQuizPageState extends State<BibleQuizPage>
     with SingleTickerProviderStateMixin {
+  late final QuizService _quizService;
   int currentQuestion = 0;
   int correctAnswers = 0;
   bool showResult = false;
@@ -34,7 +37,7 @@ class _BibleQuizPageState extends State<BibleQuizPage>
 
   bool loading = true;
   List<Map<String, dynamic>> questions = [];
-  String? quizId; // Pode ser passado por parâmetro futuramente
+  String? quizId;
 
   int countdownKey = 0;
   bool timeoutActive = false;
@@ -43,85 +46,42 @@ class _BibleQuizPageState extends State<BibleQuizPage>
   @override
   void initState() {
     super.initState();
+    _quizService = widget.quizService ?? QuizService();
     quizId = widget.quizId;
     _fetchQuestions();
   }
 
   Future<void> _fetchQuestions() async {
     setState(() { loading = true; });
-    final user = Supabase.instance.client.auth.currentUser;
+    
     // Buscar quizId aprovado mais recente se não definido
     String? usedQuizId = quizId;
     if (usedQuizId == null) {
-      final quiz = await Supabase.instance.client
-        .from('quizzes')
-        .select('id')
-        .eq('aprovado', true)
-        .order('created_at', ascending: false)
-        .limit(1)
-        .maybeSingle();
-      usedQuizId = quiz?['id'];
+      final quizzes = await _quizService.getQuizzes();
+      if (quizzes.isNotEmpty) {
+        usedQuizId = quizzes.first['id'];
+      }
     }
+    
     if (usedQuizId == null) {
       setState(() { loading = false; });
       return;
     }
-    // Buscar questões e opções
-    final questoes = await Supabase.instance.client
-      .from('quiz_questions')
-      .select('id, question_text, quiz_options(id, option_text, option_letter, is_correct)')
-      .eq('quiz_id', usedQuizId)
-      .order('order', ascending: true);
-    // Montar lista no formato esperado
-    final List<Map<String, dynamic>> loadedQuestions = [];
-    for (final q in questoes) {
-      final options = List<Map<String, dynamic>>.from(q['quiz_options']);
-      options.sort((a, b) => (a['option_letter'] as String).compareTo(b['option_letter'] as String));
-      final answerIndex = options.indexWhere((o) => o['is_correct'] == true);
-      loadedQuestions.add({
-        'id': q['id'],
-        'question': q['question_text'],
-        'options': options.map((o) => o['option_text'] as String).toList(),
-        'optionIds': options.map((o) => o['id'] as String).toList(),
-        'answer': answerIndex,
-      });
-    }
-    // Buscar respostas do usuário para esse quiz
-    List<dynamic> respostas = [];
-    if (user != null && loadedQuestions.isNotEmpty) {
-      final questionIds = loadedQuestions.map((q) => q['id']).toList();
-      respostas = await Supabase.instance.client
-        .from('quiz_answers')
-        .select('question_id, option_id, quiz_options(is_correct)')
-        .eq('user_id', user.id)
-        .inFilter('question_id', questionIds);
-    }
-    // Calcular progresso e acertos
-    int acertos = 0;
-    int respondidas = 0;
-    final Set<String> respondidasIds = {};
-    for (final r in respostas) {
-      respondidasIds.add(r['question_id']);
-      if (r['quiz_options']?['is_correct'] == true) {
-        acertos++;
-      }
-    }
-    // Descobrir próxima questão não respondida
-    int proxQuestao = 0;
-    for (int i = 0; i < loadedQuestions.length; i++) {
-      if (!respondidasIds.contains(loadedQuestions[i]['id'])) {
-        proxQuestao = i;
-        break;
-      }
-      // Se respondeu todas, fica na última
-      if (i == loadedQuestions.length - 1) proxQuestao = i;
-    }
+
+    // Buscar questões e opções usando o serviço
+    final quizData = await _quizService.getQuizWithQuestions(usedQuizId);
+    final loadedQuestions = quizData['questions'] as List<Map<String, dynamic>>;
+    
+    // Buscar resultados do usuário
+    final results = await _quizService.getQuizResults(usedQuizId);
+    
     setState(() {
       questions = loadedQuestions;
       loading = false;
-      correctAnswers = acertos;
-      progress = loadedQuestions.isNotEmpty ? respondidasIds.length / loadedQuestions.length : 0.0;
-      currentQuestion = proxQuestao;
+      correctAnswers = results['correctAnswers'] as int;
+      final score = results['score'];
+      progress = (score is int ? score.toDouble() : score) / 100;
+      currentQuestion = results['answeredQuestions'] as int;
     });
   }
 
@@ -129,62 +89,46 @@ class _BibleQuizPageState extends State<BibleQuizPage>
     final asset = correct ? 'sounds/success.mp3' : 'sounds/error.mp3';
     final player = AudioPlayer();
     await player.play(AssetSource(asset));
-    // Libera o player após o som terminar
     player.onPlayerComplete.listen((event) {
       player.dispose();
     });
   }
 
   void _onOptionSelected(int index) async {
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user == null) return; // Não logado
     final question = questions[currentQuestion];
     final questionId = question['id'];
     final optionId = question['optionIds'][index];
-    String? teamId;
-    // Se for quiz de campeonato, buscar o team_id do usuário
-    if (quizId != null) {
-      // Buscar o championship_id do quiz
-      final quizData = await Supabase.instance.client
-        .from('quizzes')
-        .select('championship_id')
-        .eq('id', quizId!)
-        .maybeSingle();
-      final championshipId = quizData?['championship_id'];
-      if (championshipId != null) {
-        // Buscar o team_id do usuário neste campeonato
-        final teamMember = await Supabase.instance.client
-          .from('quiz_team_members')
-          .select('team_id')
-          .eq('user_id', user.id)
-          .single();
-        teamId = teamMember['team_id'];
-      }
-    }
-    // Verificar se já respondeu
-    bool jaRespondeu = false;
-    if (widget.duelId != null) {
-      // No duelo, só bloqueia se já respondeu para esse duelo
-      final existing = await Supabase.instance.client
-        .from('quiz_answers')
-        .select()
-        .eq('user_id', user.id)
-        .eq('question_id', questionId)
-        .eq('duel_id', widget.duelId!)
-        .maybeSingle();
-      jaRespondeu = existing != null;
-    } else {
-      // Fora do duelo, bloqueia se já respondeu globalmente
-      final existing = await Supabase.instance.client
-        .from('quiz_answers')
-        .select()
-        .eq('user_id', user.id)
-        .eq('question_id', questionId)
-        .maybeSingle();
-      jaRespondeu = existing != null;
-    }
-    if (jaRespondeu) {
-      if (!context.mounted) return;
+    
+    try {
+      await _quizService.submitAnswer(
+        questionId: questionId,
+        optionId: optionId,
+        duelId: widget.duelId,
+      );
+      
+      final bool acertou = index == question['answer'];
+      setState(() {
+        showResult = true;
+        isCorrect = acertou;
+        if (acertou) correctAnswers++;
+        progress = (currentQuestion + 1) / questions.length;
+      });
+      
+      _playSound(acertou);
+      
+      Future.delayed(const Duration(seconds: 2), () {
+        if (!mounted) return;
+        setState(() {
+          showResult = false;
+          if (currentQuestion < questions.length - 1) {
+            currentQuestion++;
+          } else {
+            quizFinished = true;
+          }
+        });
+      });
+    } catch (e) {
+      if (!mounted) return;
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -240,61 +184,7 @@ class _BibleQuizPageState extends State<BibleQuizPage>
           ],
         ),
       );
-      return;
     }
-    // Registrar resposta no Supabase
-    await Supabase.instance.client.from('quiz_answers').insert({
-      'user_id': user.id,
-      'question_id': questionId,
-      'option_id': optionId,
-      'answered_at': DateTime.now().toIso8601String(),
-      if (teamId != null) 'team_id': teamId,
-      if (widget.duelId != null) 'duel_id': widget.duelId!,
-    });
-    final bool acertou = index == question['answer'];
-    setState(() {
-      showResult = true;
-      isCorrect = acertou;
-      if (acertou) correctAnswers++;
-      progress = (currentQuestion + 1) / questions.length;
-    });
-    _playSound(acertou);
-    Future.delayed(const Duration(seconds: 2), () async {
-      setState(() {
-        showResult = false;
-        if (currentQuestion < questions.length - 1) {
-          currentQuestion++;
-        }
-      });
-      // Se terminou o quiz, salva resultado do duelo se duelId estiver presente
-      if (currentQuestion == questions.length - 1 && widget.duelId != null) {
-        final user = Supabase.instance.client.auth.currentUser;
-        if (user != null) {
-          // Buscar todas as respostas corretas deste duelo e quiz
-          final respostas = await Supabase.instance.client
-            .from('quiz_answers')
-            .select('question_id, option_id, quiz_options(is_correct)')
-            .eq('user_id', user.id)
-            .eq('duel_id', widget.duelId!)
-            .eq('quiz_id', quizId!)
-            .order('answered_at', ascending: true);
-
-          int acertos = 0;
-          for (final r in respostas) {
-            if (r['quiz_options']?['is_correct'] == true) {
-              acertos++;
-            }
-          }
-
-          await Supabase.instance.client.from('quiz_duel_results').upsert({
-            'duel_id': widget.duelId!,
-            'user_id': user.id,
-            'score': acertos,
-            'finished_at': DateTime.now().toIso8601String(),
-          });
-        }
-      }
-    });
   }
 
   void _nextQuestionTimeout() async {
@@ -397,6 +287,78 @@ class _BibleQuizPageState extends State<BibleQuizPage>
                       textAlign: TextAlign.center,
                     ),
                   ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (currentQuestion >= questions.length) {
+      final size = MediaQuery.of(context).size;
+      final isSmall = size.height < 650 || size.width < 350;
+      final isLarge = size.width > 600;
+      final errors = questions.length - correctAnswers;
+      return Scaffold(
+        body: Stack(
+          children: [
+            // Fundo gradiente animado
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 800),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color(0xFF2D2EFF), // Azul vibrante
+                    Color(0xFF7B2FF2), // Roxo
+                    Color(0xFFE94057), // Vermelho/rosa
+                  ],
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: isSmall ? 12 : isLarge ? 64 : 32),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.emoji_events, color: Colors.amber, size: 64),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Parabéns! Você finalizou o quiz.',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      CustomProgressBar(
+                        value: correctAnswers / (questions.isEmpty ? 1 : questions.length),
+                        height: isSmall ? 24 : isLarge ? 48 : 38,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Acertos: $correctAnswers de ${questions.length}',
+                        style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                      ),
+                      Text(
+                        'Erros: $errors',
+                        style: const TextStyle(fontSize: 16, color: Colors.white70),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 32),
+                      ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2D2EFF),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        ),
+                        child: const Text('Voltar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

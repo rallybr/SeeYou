@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'features/auth/pages/login_page.dart';
 import 'features/auth/pages/register_flow_page.dart';
+import 'features/auth/auth_service.dart';
 import 'features/feed/feed_page.dart';
 import 'features/admin/dashboard_page.dart';
 import 'features/bible_quiz/bible_quiz_page.dart';
@@ -39,6 +40,8 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authService = AuthService();
+    
     return MaterialApp(
       title: 'SeeYou',
       debugShowCheckedModeBanner: false,
@@ -62,12 +65,12 @@ class MyApp extends StatelessWidget {
           if (snapshot.data == true) {
             return const FeedPage();
           } else {
-            return const LoginPage();
+            return LoginPage(authService: authService);
           }
         },
       ),
       routes: {
-        '/login': (context) => const LoginPage(),
+        '/login': (context) => LoginPage(authService: authService),
         '/register': (context) => const RegisterFlowPage(),
         '/feed': (context) => const FeedPage(),
         '/admin': (context) => const DashboardPage(),

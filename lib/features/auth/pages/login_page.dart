@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../auth_service.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({Key? key}) : super(key: key);
+  final AuthService authService;
+  const LoginPage({Key? key, required this.authService}) : super(key: key);
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -22,40 +24,26 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _login() async {
-    print('DEBUG: Iniciando login com email: ' + _emailController.text.trim());
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final response = await Supabase.instance.client.auth.signInWithPassword(
-        email: _emailController.text.trim(),
-        password: _senhaController.text,
+      final user = await widget.authService.login(
+        _emailController.text.trim(),
+        _senhaController.text,
       );
-      print('DEBUG: Resposta do Supabase: ' + response.toString());
-      print('DEBUG: Usuário retornado: ' + (response.user?.id ?? 'null'));
-      if (response.user != null) {
-        if (mounted) {
-          print('DEBUG: Login bem-sucedido, navegando para /feed');
-          Navigator.of(context).pushNamedAndRemoveUntil('/feed', (route) => false);
-        }
-      } else {
-        print('DEBUG: Email ou senha inválidos.');
-        setState(() {
-          _error = 'Email ou senha inválidos.';
-        });
+      if (user != null && mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/feed', (route) => false);
       }
-    } catch (e, stack) {
-      print('DEBUG: Erro ao fazer login: ' + e.toString());
-      print('DEBUG: Stacktrace: ' + stack.toString());
+    } catch (e) {
       setState(() {
-        _error = 'Erro ao fazer login: [31m' + e.toString();
+        _error = e.toString();
       });
     } finally {
       setState(() {
         _loading = false;
       });
-      print('DEBUG: Finalizou tentativa de login.');
     }
   }
 
